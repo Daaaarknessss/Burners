@@ -1,0 +1,253 @@
+/* === BURNERS — manga ink system === */
+:root{
+  --ink: #0a0a0a;
+  --paper: #f6f3ec;
+  --paper-2: #ece7da;
+  --paper-3: #ddd5c1;
+  --red: oklch(0.58 0.20 28);
+  --red-deep: oklch(0.42 0.18 28);
+  --red-soft: oklch(0.92 0.05 28);
+  --shadow: 8px 8px 0 0 var(--ink);
+  --shadow-sm: 4px 4px 0 0 var(--ink);
+  --shadow-xs: 2px 2px 0 0 var(--ink);
+  --border: 3px solid var(--ink);
+  --border-bold: 4px solid var(--ink);
+  --t-fast: 240ms cubic-bezier(.2,.7,.2,1);
+  --t-med: 480ms cubic-bezier(.2,.7,.2,1);
+  --t-slow: 760ms cubic-bezier(.2,.7,.2,1);
+}
+
+*,*::before,*::after{ box-sizing: border-box; }
+html,body,#root{ height:100%; margin:0; }
+body{
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "DM Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* === HALFTONE / TEXTURES === */
+.halftone{
+  background-image: radial-gradient(circle at center, var(--ink) 22%, transparent 24%);
+  background-size: 8px 8px;
+}
+.halftone-fine{
+  background-image: radial-gradient(circle at center, var(--ink) 30%, transparent 32%);
+  background-size: 5px 5px;
+}
+.halftone-soft{
+  background-image: radial-gradient(circle at center, rgba(10,10,10,0.55) 30%, transparent 32%);
+  background-size: 6px 6px;
+}
+.paper-grain{
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 20% 15%, rgba(10,10,10,0.035) 0, transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(10,10,10,0.04) 0, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(10,10,10,0.02) 0, transparent 60%);
+}
+.speed-lines{
+  background:
+    repeating-conic-gradient(from 0deg at 50% 50%,
+      var(--ink) 0deg 0.4deg,
+      transparent 0.4deg 4deg);
+  mask: radial-gradient(circle, transparent 28%, black 60%);
+  -webkit-mask: radial-gradient(circle, transparent 28%, black 60%);
+  opacity: 0.35;
+}
+
+/* === TYPE === */
+.display{
+  font-family: "Anton", "Bebas Neue", Impact, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 0.86;
+  text-transform: uppercase;
+}
+.mono{ font-family: "Special Elite", "Courier New", monospace; }
+.hand{ font-family: "Caveat", cursive; }
+.eyebrow{
+  font-family: "Special Elite", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+}
+
+/* === PANELS === */
+.panel{
+  background: var(--paper);
+  border: var(--border-bold);
+  box-shadow: var(--shadow);
+  position: relative;
+}
+.panel-sm{
+  background: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+.ink-edge{ border: var(--border-bold); }
+
+/* === BUTTONS === */
+.btn{
+  font-family: "Anton", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 22px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 14px 28px;
+  border: 3px solid var(--ink);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+  display: inline-flex; align-items: center; gap: 12px;
+}
+.btn:hover{ transform: translate(-2px,-2px); box-shadow: 6px 6px 0 0 var(--ink); }
+.btn:active{ transform: translate(2px,2px); box-shadow: 0 0 0 0 var(--ink); }
+.btn.ghost{ background: var(--paper); color: var(--ink); }
+.btn.red{ background: var(--red); color: var(--paper); }
+.btn.sm{ font-size: 14px; padding: 8px 16px; }
+.btn:disabled{ background: var(--paper-3); color: rgba(10,10,10,0.4); cursor: not-allowed; transform: none; box-shadow: var(--shadow-xs); }
+
+/* === ROOT STAGE === */
+#root{ display: block; }
+.stage{
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* === Reveal animations === */
+@keyframes ink-in {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.96); filter: blur(6px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes smash-in {
+  0%   { opacity: 0; transform: translateY(-30px) scale(1.3) skewX(-4deg); }
+  60%  { opacity: 1; transform: translateY(4px) scale(0.98) skewX(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes slide-up {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes panel-pop {
+  0%   { opacity: 0; transform: translate(-10px,-10px) rotate(-2deg); box-shadow: 0 0 0 0 var(--ink); }
+  60%  { opacity: 1; transform: translate(2px,2px) rotate(0.3deg); box-shadow: 10px 10px 0 0 var(--ink); }
+  100% { opacity: 1; transform: translate(0,0) rotate(0); box-shadow: var(--shadow); }
+}
+@keyframes flicker {
+  0%,100% { transform: translateY(0) scale(1); }
+  50%     { transform: translateY(-1.5px) scale(1.04); }
+}
+@keyframes ignite {
+  0%   { transform: scale(0.4) rotate(-20deg); opacity: 0; }
+  60%  { transform: scale(1.1) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes flash {
+  0%   { background: var(--paper); }
+  20%  { background: #fff; }
+  50%  { background: var(--ink); }
+  80%  { background: #fff; }
+  100% { background: var(--paper); }
+}
+@keyframes drift-h {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-60px); }
+}
+
+.reveal{ animation: ink-in 700ms cubic-bezier(.2,.7,.2,1) both; }
+.smash{ animation: smash-in 720ms cubic-bezier(.2,.8,.2,1) both; }
+.slide-up{ animation: slide-up 560ms cubic-bezier(.2,.7,.2,1) both; }
+.panel-pop{ animation: panel-pop 720ms cubic-bezier(.2,.7,.2,1) both; }
+.flicker{ animation: flicker 600ms ease-in-out infinite; transform-origin: center bottom; }
+
+/* === STAGE TRANSITIONS === */
+.fade-enter{ opacity: 0; }
+.fade-enter-active{ opacity: 1; transition: opacity var(--t-med); }
+.fade-exit{ opacity: 1; }
+.fade-exit-active{ opacity: 0; transition: opacity var(--t-fast); }
+
+/* page wipe - black bars closing then opening */
+.wipe{
+  position: fixed; inset: 0; pointer-events: none; z-index: 999;
+}
+.wipe::before, .wipe::after{
+  content: ""; position: absolute; left: 0; right: 0; background: var(--ink);
+  transform: scaleY(0);
+}
+.wipe::before{ top: 0; height: 50%; transform-origin: top; }
+.wipe::after{ bottom: 0; height: 50%; transform-origin: bottom; }
+.wipe.run::before, .wipe.run::after{
+  animation: wipe-close 360ms cubic-bezier(.6,.0,.4,1) forwards,
+             wipe-open 420ms cubic-bezier(.4,.0,.2,1) forwards 380ms;
+}
+@keyframes wipe-close { from{ transform: scaleY(0); } to{ transform: scaleY(1); } }
+@keyframes wipe-open  { from{ transform: scaleY(1); } to{ transform: scaleY(0); } }
+
+/* === SCROLL inside dashboard === */
+.scroll{ overflow-y: auto; overflow-x: hidden; }
+.scroll::-webkit-scrollbar{ width: 10px; }
+.scroll::-webkit-scrollbar-track{ background: var(--paper-2); border-left: 2px solid var(--ink); }
+.scroll::-webkit-scrollbar-thumb{ background: var(--ink); border: 2px solid var(--paper-2); }
+
+/* === SELECTION === */
+::selection{ background: var(--ink); color: var(--paper); }
+
+/* === Range slider manga style === */
+input[type="range"].ink{
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 8px;
+  background: var(--paper-2);
+  border: 2px solid var(--ink);
+  outline: none;
+}
+input[type="range"].ink::-webkit-slider-thumb{
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  background: var(--red);
+  border: 3px solid var(--ink);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--ink);
+}
+input[type="range"].ink::-moz-range-thumb{
+  width: 22px; height: 22px;
+  background: var(--red);
+  border: 3px solid var(--ink);
+  cursor: pointer;
+}
+
+/* === Text inputs === */
+.ink-input{
+  width: 100%;
+  font-family: "DM Sans", sans-serif;
+  font-size: 16px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  outline: none;
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--t-fast), transform var(--t-fast);
+}
+.ink-input:focus{ box-shadow: var(--shadow-sm); transform: translate(-1px,-1px); }
+textarea.ink-input{ resize: none; font-family: "Caveat", cursive; font-size: 22px; line-height: 1.25; }
+
+/* corner-stamp */
+.stamp{
+  position: absolute;
+  font-family: "Special Elite", monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.55;
+}
+
+/* === slide-up stagger helper === */
+.slide-up{ animation-fill-mode: both; }
