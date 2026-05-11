@@ -95,10 +95,10 @@ export function MiniFlame({ size = 20, lit = true }) {
   )
 }
 
-export function SFX({ children, rotate = -6, size = 64, color = 'var(--ink)', top, left, right, bottom, style }) {
+export function SFX({ children, rotate = -6, size = 64, color = 'var(--ink)', top, left, right, bottom, style, className = '' }) {
   return (
     <div
-      className="display"
+      className={`display ${className}`}
       style={{
         position: 'absolute',
         top, left, right, bottom,

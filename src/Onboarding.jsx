@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BURNERS, BurnerArt, SFX, Bubble, HalftoneCorner } from './components'
+import { useIsMobile } from './hooks'
 
 export default function Onboarding({ onComplete }) {
   const [scene, setScene] = useState(0)
@@ -50,14 +51,15 @@ function SceneIntro() {
     <div className="stage" style={{ display: 'grid', placeItems: 'center', position: 'absolute', inset: 0 }}>
       <div style={{ position: 'relative', textAlign: 'center' }}>
         <div className="eyebrow reveal" style={{ marginBottom: 18, opacity: 0.7 }}>chapter 01 — the four burners</div>
-        <h1 className="display smash" style={{ fontSize: 'clamp(96px, 18vw, 240px)', margin: 0, lineHeight: 0.82 }}>
+        <h1 className="display smash" style={{ fontSize: 'clamp(72px, 18vw, 240px)', margin: 0, lineHeight: 0.82 }}>
           BURN<span style={{ color: 'var(--red)' }}>ER</span>S
         </h1>
         <div className="mono reveal" style={{ marginTop: 14, fontSize: 13, letterSpacing: '0.3em', opacity: 0.6, animationDelay: '0.5s' }}>
           a daily log for the unbalanced life
         </div>
-        <SFX rotate={-12} size={88} top={-40} left={-180}>DON!</SFX>
-        <SFX rotate={10} size={64} bottom={-40} right={-150} color="var(--red)">GO–</SFX>
+        {/* hidden on mobile — clips off-screen */}
+        <SFX className="hide-mobile" rotate={-12} size={88} top={-40} left={-180}>DON!</SFX>
+        <SFX className="hide-mobile" rotate={10} size={64} bottom={-40} right={-150} color="var(--red)">GO–</SFX>
       </div>
       <div className="speed-lines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
     </div>
@@ -65,29 +67,33 @@ function SceneIntro() {
 }
 
 function ScenePremise({ onNext }) {
+  const isMobile = useIsMobile()
   return (
-    <div className="stage" style={{ position: 'absolute', inset: 0, padding: '6vh 6vw', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div
+      className="stage scene-scroll"
+      style={{ position: 'absolute', inset: 0, padding: '6vh 6vw', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+    >
       <div className="eyebrow slide-up" style={{ opacity: 0.6, animationDelay: '0.1s' }}>// premise</div>
-      <h2 className="display slide-up" style={{ fontSize: 'clamp(40px, 6vw, 76px)', margin: '8px 0 28px', maxWidth: 1100, animationDelay: '0.18s' }}>
+      <h2 className="display slide-up" style={{ fontSize: 'clamp(32px, 6vw, 76px)', margin: '8px 0 28px', maxWidth: 1100, animationDelay: '0.18s' }}>
         Imagine your life is a stove<br />with <span style={{ color: 'var(--red)' }}>four burners.</span>
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, maxWidth: 1200 }}>
+      <div className="premise-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, maxWidth: 1200 }}>
         {BURNERS.map((b, i) => (
           <div key={b.id} className="panel panel-pop" style={{ padding: 18, animationDelay: `${0.35 + i * 0.12}s` }}>
             <HalftoneCorner corner="tr" size={70} />
             <div className="eyebrow" style={{ opacity: 0.6 }}>burner 0{i + 1}</div>
-            <div className="display" style={{ fontSize: 38, marginTop: 6 }}>{b.label}</div>
+            <div className="display" style={{ fontSize: isMobile ? 28 : 38, marginTop: 6 }}>{b.label}</div>
             <div className="mono" style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>{b.kana}</div>
             <div style={{ marginTop: 14, display: 'grid', placeItems: 'center' }}>
-              <BurnerArt ignited={false} size={130} />
+              <BurnerArt ignited={false} size={isMobile ? 80 : 130} />
             </div>
-            <div className="hand" style={{ fontSize: 20, marginTop: 10, lineHeight: 1.15 }}>{b.blurb}</div>
+            <div className="hand" style={{ fontSize: 18, marginTop: 10, lineHeight: 1.15 }}>{b.blurb}</div>
           </div>
         ))}
       </div>
 
-      <div className="slide-up" style={{ marginTop: 36, display: 'flex', alignItems: 'center', gap: 16, animationDelay: '1s' }}>
+      <div className="slide-up" style={{ marginTop: 36, display: 'flex', alignItems: 'center', gap: 16, animationDelay: '1s', flexWrap: 'wrap' }}>
         <button className="btn red" onClick={onNext}>Keep reading ▸</button>
         <span className="mono" style={{ opacity: 0.5, fontSize: 12 }}>or press [enter]</span>
       </div>
@@ -98,9 +104,12 @@ function ScenePremise({ onNext }) {
 
 function SceneRule({ onNext }) {
   return (
-    <div className="stage" style={{ position: 'absolute', inset: 0, padding: '8vh 8vw', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start' }}>
+    <div
+      className="stage scene-scroll"
+      style={{ position: 'absolute', inset: 0, padding: '8vh 8vw', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start' }}
+    >
       <div className="eyebrow slide-up" style={{ opacity: 0.6 }}>// the rule</div>
-      <h2 className="display slide-up" style={{ fontSize: 'clamp(48px, 8vw, 108px)', margin: '6px 0 18px', maxWidth: 1200, animationDelay: '0.1s' }}>
+      <h2 className="display slide-up" style={{ fontSize: 'clamp(36px, 8vw, 108px)', margin: '6px 0 18px', maxWidth: 1200, animationDelay: '0.1s' }}>
         To be successful<br />
         you must <span style={{ color: 'var(--red)' }}>cut one burner.</span><br />
         To be <em style={{ fontStyle: 'italic' }}>really</em> successful —
@@ -109,7 +118,7 @@ function SceneRule({ onNext }) {
 
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-end', marginTop: 24, flexWrap: 'wrap' }}>
         <Bubble className="slide-up" tailDir="bl" style={{ maxWidth: 360, animationDelay: '0.5s' }}>
-          <div className="hand" style={{ fontSize: 26, lineHeight: 1.15 }}>
+          <div className="hand" style={{ fontSize: 24, lineHeight: 1.15 }}>
             Every choice has a cost.<br />
             Pick the two flames you want to feed —
             <span style={{ color: 'var(--red)' }}> this season.</span>
@@ -126,35 +135,39 @@ function SceneRule({ onNext }) {
       <button className="btn slide-up" onClick={onNext} style={{ marginTop: 40, animationDelay: '1s' }}>
         Show me the burners ▸
       </button>
-      <SFX rotate={-8} size={90} top="6vh" right="8vw" color="var(--red)">CHOOSE.</SFX>
+      <SFX className="hide-mobile" rotate={-8} size={90} top="6vh" right="8vw" color="var(--red)">CHOOSE.</SFX>
       <KeyHandler onEnter={onNext} />
     </div>
   )
 }
 
 function ScenePick({ picked, togglePick, onNext }) {
+  const isMobile = useIsMobile()
   const canContinue = picked.length >= 1
   const isFull = picked.length >= 2
 
   return (
-    <div className="stage" style={{ position: 'absolute', inset: 0, padding: '5vh 5vw', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className="stage scene-scroll"
+      style={{ position: 'absolute', inset: 0, padding: '5vh 5vw', display: 'flex', flexDirection: 'column' }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <div className="eyebrow slide-up" style={{ opacity: 0.6 }}>// step 03 — ignite</div>
-          <h2 className="display slide-up" style={{ fontSize: 'clamp(40px, 6vw, 72px)', margin: '6px 0 0', animationDelay: '0.08s' }}>
+          <h2 className="display slide-up" style={{ fontSize: 'clamp(32px, 6vw, 72px)', margin: '6px 0 0', animationDelay: '0.08s' }}>
             Tap to <span style={{ color: 'var(--red)' }}>ignite.</span>
           </h2>
-          <div className="mono slide-up" style={{ opacity: 0.55, fontSize: 13, marginTop: 8, animationDelay: '0.15s' }}>
-            tap once to light · tap again to extinguish · maximum 2
+          <div className="mono slide-up" style={{ opacity: 0.55, fontSize: 12, marginTop: 8, animationDelay: '0.15s' }}>
+            {isMobile ? 'tap to light · tap again to extinguish · max 2' : 'tap once to light · tap again to extinguish · maximum 2'}
           </div>
         </div>
-        <div className="panel-sm slide-up" style={{ padding: '10px 16px', display: 'flex', gap: 12, alignItems: 'center', animationDelay: '0.22s' }}>
+        <div className="panel-sm slide-up" style={{ padding: '10px 16px', display: 'flex', gap: 12, alignItems: 'center', animationDelay: '0.22s', flexShrink: 0 }}>
           <div className="eyebrow" style={{ opacity: 0.6 }}>lit</div>
           <div className="display" style={{ fontSize: 36, color: isFull ? 'var(--red)' : 'var(--ink)' }}>{picked.length}/2</div>
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 22, marginTop: 28, minHeight: 0 }}>
+      <div className="pick-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 22, marginTop: 28, minHeight: 0 }}>
         {BURNERS.map((b, i) => (
           <BurnerCard
             key={b.id}
@@ -163,15 +176,16 @@ function ScenePick({ picked, togglePick, onNext }) {
             lit={picked.includes(b.id)}
             disabled={!picked.includes(b.id) && isFull}
             onClick={() => togglePick(b.id)}
+            isMobile={isMobile}
           />
         ))}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 }}>
-        <div className="hand" style={{ fontSize: 22, opacity: 0.7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 22, gap: 12, flexWrap: 'wrap' }}>
+        <div className="hand" style={{ fontSize: 20, opacity: 0.7 }}>
           {picked.length === 0 && '...waiting on you.'}
-          {picked.length === 1 && 'one flame burning. recommended: light one more.'}
-          {picked.length === 2 && <>two flames burning. <span style={{ color: 'var(--red)' }}>good. continue.</span></>}
+          {picked.length === 1 && 'one flame burning. light one more.'}
+          {picked.length === 2 && <>two flames. <span style={{ color: 'var(--red)' }}>good. continue.</span></>}
         </div>
         <button className="btn red" onClick={onNext} disabled={!canContinue}>Review ▸</button>
       </div>
@@ -179,7 +193,10 @@ function ScenePick({ picked, togglePick, onNext }) {
   )
 }
 
-function BurnerCard({ burner, index, lit, disabled, onClick }) {
+function BurnerCard({ burner, index, lit, disabled, onClick, isMobile }) {
+  const artSize = isMobile ? 120 : 210
+  const artAreaMin = isMobile ? 100 : 180
+
   return (
     <button
       onClick={onClick}
@@ -191,7 +208,7 @@ function BurnerCard({ burner, index, lit, disabled, onClick }) {
         background: lit ? 'var(--paper)' : 'var(--paper-2)',
         border: '4px solid var(--ink)',
         boxShadow: lit ? '10px 10px 0 0 var(--ink)' : '6px 6px 0 0 var(--ink)',
-        padding: 18,
+        padding: isMobile ? 12 : 18,
         position: 'relative',
         transition: 'transform 280ms cubic-bezier(.2,.7,.2,1), box-shadow 280ms, background 280ms',
         transform: lit ? 'translate(-3px,-3px)' : 'translate(0,0)',
@@ -207,68 +224,72 @@ function BurnerCard({ burner, index, lit, disabled, onClick }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div className="eyebrow" style={{ opacity: 0.6 }}>burner 0{index + 1}</div>
-          <div className="display" style={{ fontSize: 42, marginTop: 4, color: lit ? 'var(--red)' : 'var(--ink)' }}>{burner.label}</div>
-          <div className="mono" style={{ fontSize: 12, opacity: 0.55 }}>{burner.kana}</div>
+          <div className="display" style={{ fontSize: isMobile ? 28 : 42, marginTop: 4, color: lit ? 'var(--red)' : 'var(--ink)' }}>{burner.label}</div>
+          <div className="mono" style={{ fontSize: 11, opacity: 0.55 }}>{burner.kana}</div>
         </div>
-        <div className="display" style={{ fontSize: 14, padding: '4px 10px', border: '2px solid var(--ink)', background: lit ? 'var(--ink)' : 'transparent', color: lit ? 'var(--paper)' : 'var(--ink)' }}>
+        <div className="display" style={{ fontSize: 13, padding: '4px 8px', border: '2px solid var(--ink)', background: lit ? 'var(--ink)' : 'transparent', color: lit ? 'var(--paper)' : 'var(--ink)', flexShrink: 0 }}>
           {lit ? 'ON' : 'OFF'}
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', margin: '14px 0', position: 'relative', minHeight: 180 }}>
+      <div style={{ flex: 1, display: 'grid', placeItems: 'center', margin: '10px 0', position: 'relative', minHeight: artAreaMin }}>
         <div style={{ animation: lit ? 'ignite 520ms cubic-bezier(.2,.7,.2,1)' : 'none' }}>
-          <BurnerArt ignited={lit} size={210} />
+          <BurnerArt ignited={lit} size={artSize} />
         </div>
-        {lit && <SFX rotate={-10} size={36} top={6} right={2} color="var(--red)">FWOOM</SFX>}
+        {lit && <SFX rotate={-10} size={isMobile ? 24 : 36} top={4} right={2} color="var(--red)">FWOOM</SFX>}
       </div>
 
-      <div className="hand" style={{ fontSize: 20, lineHeight: 1.15 }}>{burner.blurb}</div>
+      <div className="hand" style={{ fontSize: isMobile ? 16 : 20, lineHeight: 1.15 }}>{burner.blurb}</div>
     </button>
   )
 }
 
 function SceneConfirm({ picked, onBack, onConfirm }) {
+  const isMobile = useIsMobile()
   const chosen = BURNERS.filter(b => picked.includes(b.id))
   const cut = BURNERS.filter(b => !picked.includes(b.id))
 
   return (
-    <div className="stage" style={{ position: 'absolute', inset: 0, padding: '6vh 6vw', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 22 }}>
+    <div
+      className="stage scene-scroll"
+      style={{ position: 'absolute', inset: 0, padding: '6vh 6vw', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 22 }}
+    >
       <div>
         <div className="eyebrow slide-up" style={{ opacity: 0.6 }}>// final panel</div>
-        <h2 className="display slide-up" style={{ fontSize: 'clamp(40px, 6vw, 80px)', margin: '6px 0 0', animationDelay: '0.08s' }}>
+        <h2 className="display slide-up" style={{ fontSize: 'clamp(32px, 6vw, 80px)', margin: '6px 0 0', animationDelay: '0.08s' }}>
           This is your <span style={{ color: 'var(--red)' }}>season.</span>
         </h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 28, minHeight: 0 }}>
-        <div className="panel panel-pop" style={{ padding: 24, animationDelay: '0.15s' }}>
+      <div className="confirm-grid" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 28, minHeight: 0, overflow: 'hidden' }}>
+        <div className="panel panel-pop" style={{ padding: isMobile ? 16 : 24, animationDelay: '0.15s', overflow: 'auto' }}>
           <HalftoneCorner corner="tr" size={120} />
           <div className="eyebrow" style={{ opacity: 0.6 }}>burning</div>
           <div className="display" style={{ fontSize: 30, marginTop: 2 }}>your flames</div>
-          <div style={{ display: 'grid', gridTemplateColumns: chosen.length === 1 ? '1fr' : '1fr 1fr', gap: 18, marginTop: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: chosen.length === 1 ? '1fr' : isMobile ? '1fr' : '1fr 1fr', gap: 18, marginTop: 18 }}>
             {chosen.map((b) => (
-              <div key={b.id} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                <BurnerArt ignited={true} size={130} />
+              <div key={b.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <BurnerArt ignited={true} size={isMobile ? 80 : 130} />
                 <div>
-                  <div className="display" style={{ fontSize: 36, color: 'var(--red)' }}>{b.label}</div>
-                  <div className="mono" style={{ fontSize: 12, opacity: 0.6 }}>{b.kana}</div>
-                  <div className="hand" style={{ fontSize: 20, marginTop: 4, lineHeight: 1.1 }}>{b.blurb}</div>
+                  <div className="display" style={{ fontSize: isMobile ? 26 : 36, color: 'var(--red)' }}>{b.label}</div>
+                  <div className="mono" style={{ fontSize: 11, opacity: 0.6 }}>{b.kana}</div>
+                  <div className="hand" style={{ fontSize: 18, marginTop: 4, lineHeight: 1.1 }}>{b.blurb}</div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="panel-sm panel-pop" style={{ padding: 22, background: 'var(--paper-2)', animationDelay: '0.28s' }}>
+        <div className="panel-sm panel-pop" style={{ padding: isMobile ? 14 : 22, background: 'var(--paper-2)', animationDelay: '0.28s', overflow: 'auto' }}>
           <div className="eyebrow" style={{ opacity: 0.6 }}>extinguished</div>
-          <div className="display" style={{ fontSize: 26, marginTop: 2 }}>this season's cost</div>
+          <div className="display" style={{ fontSize: isMobile ? 20 : 26, marginTop: 2 }}>this season's cost</div>
           <div className="mono" style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>// you can come back. just not now.</div>
-          <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+          <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
             {cut.map(b => (
-              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '3px solid var(--ink)', background: 'var(--paper)', filter: 'grayscale(0.6)', opacity: 0.75 }}>
-                <BurnerArt ignited={false} size={56} />
-                <div style={{ flex: 1 }}>
-                  <div className="display" style={{ fontSize: 22, textDecoration: 'line-through', textDecorationThickness: 3 }}>{b.label}</div>
+              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, border: '3px solid var(--ink)', background: 'var(--paper)', filter: 'grayscale(0.6)', opacity: 0.75 }}>
+                <BurnerArt ignited={false} size={isMobile ? 40 : 56} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="display" style={{ fontSize: isMobile ? 16 : 22, textDecoration: 'line-through', textDecorationThickness: 3 }}>{b.label}</div>
                   <div className="mono" style={{ fontSize: 10, opacity: 0.55 }}>{b.kana}</div>
                 </div>
                 <div className="eyebrow" style={{ opacity: 0.5 }}>off</div>
@@ -278,9 +299,9 @@ function SceneConfirm({ picked, onBack, onConfirm }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button className="btn ghost" onClick={onBack}>◂ change</button>
-        <div className="hand" style={{ fontSize: 24, opacity: 0.75 }}>ready? this opens your daily log.</div>
+        {!isMobile && <div className="hand" style={{ fontSize: 22, opacity: 0.75 }}>ready? this opens your daily log.</div>}
         <button className="btn red" onClick={onConfirm}>Begin →</button>
       </div>
 

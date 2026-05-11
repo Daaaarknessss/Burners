@@ -251,3 +251,150 @@ textarea.ink-input{ resize: none; font-family: "Caveat", cursive; font-size: 22p
 
 /* === slide-up stagger helper === */
 .slide-up{ animation-fill-mode: both; }
+
+/* ============================================================
+   MOBILE  ≤ 639px
+   ============================================================ */
+@media (max-width: 639px) {
+
+  /* Allow natural scrolling */
+  html, body, #root { height: auto; min-height: 100%; }
+  body { overflow-y: auto; overflow-x: hidden; }
+
+  .stage {
+    height: auto;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
+  /* Onboarding scenes become scrollable blocks instead of absolute overlays */
+  .scene-scroll {
+    position: relative !important;
+    inset: unset !important;
+    min-height: 100svh;
+    overflow-y: auto;
+  }
+
+  /* Utility: hide decorative SFX stamps that clip off-screen */
+  .hide-mobile { display: none !important; }
+
+  /* Buttons */
+  .btn { font-size: 16px; padding: 11px 20px; gap: 8px; }
+  .btn.sm { font-size: 12px; padding: 6px 12px; }
+
+  /* Premise: 4-col → 2-col */
+  .premise-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    max-width: 100% !important;
+  }
+
+  /* Pick scene burner grid: 4-col → 2-col */
+  .pick-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    flex: unset !important;
+    min-height: unset !important;
+  }
+
+  /* Confirm: 2-col → 1-col */
+  .confirm-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+    min-height: unset !important;
+    overflow-y: visible !important;
+  }
+
+  /* Reduce heavy shadows on mobile */
+  .panel { box-shadow: var(--shadow-sm); }
+  .panel-sm { box-shadow: var(--shadow-xs); }
+
+  /* ── Dashboard ── */
+  .dash-root {
+    display: flex !important;
+    flex-direction: column;
+    height: auto !important;
+    min-height: 100svh;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    padding: 16px 16px 32px !important;
+    gap: 14px !important;
+  }
+
+  .dash-header {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .dash-header-day { font-size: 48px !important; }
+
+  /* Mobile tab bar */
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 3px solid var(--ink);
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+  }
+
+  .mobile-tab {
+    all: unset;
+    font-family: "Anton", sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 14px 10px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--paper-2);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background var(--t-fast), color var(--t-fast);
+    border-right: 3px solid var(--ink);
+  }
+  .mobile-tab:last-child { border-right: none; }
+  .mobile-tab.active { background: var(--ink); color: var(--paper); }
+
+  .mobile-tab-count {
+    font-family: "Special Elite", monospace;
+    font-size: 12px;
+    padding: 2px 6px;
+    border: 2px solid currentColor;
+    line-height: 1;
+  }
+
+  /* Mobile tab panel fills remaining space */
+  .dash-tab-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dash-tab-panel .panel,
+  .dash-tab-panel .panel.reveal {
+    flex: 1;
+    min-height: 320px;
+  }
+
+  /* Week strip: label above, heat rows scroll horizontally */
+  .week-strip {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .week-rows { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+
+  .week-heat-row {
+    grid-template-columns: 68px repeat(7, minmax(36px, 1fr)) !important;
+    gap: 4px !important;
+    min-width: 340px;
+  }
+}
+
+/* Hide mobile tab bar on desktop */
+.mobile-tabs { display: none; }
+
