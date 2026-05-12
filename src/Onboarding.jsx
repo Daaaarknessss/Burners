@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BURNERS, BurnerArt, SFX, Bubble, HalftoneCorner } from './components'
 import { useIsMobile } from './hooks'
 
@@ -22,16 +22,16 @@ export default function Onboarding({ onComplete }) {
     })
   }
 
-  const handleConfirm = () => {
+  const handleRelease = (name) => {
     setClosing(true)
-    setTimeout(() => onComplete(picked), 760)
+    setTimeout(() => onComplete(picked, name), 760)
   }
 
   return (
     <div className="stage paper-grain" style={{ position: 'relative' }}>
       <div style={{
         position: 'absolute', inset: 0,
-        background: 'radial-gradient(ellipse at 20% 10%, rgba(10,10,10,0.05), transparent 50%), radial-gradient(ellipse at 80% 95%, rgba(10,10,10,0.06), transparent 55%)',
+        background: 'radial-gradient(ellipse at 20% 10%, var(--overlay-grain), transparent 50%), radial-gradient(ellipse at 80% 95%, var(--overlay-grain), transparent 55%)',
         pointerEvents: 'none',
       }} />
 
@@ -39,7 +39,8 @@ export default function Onboarding({ onComplete }) {
       {scene === 1 && <ScenePremise key="s1" onNext={() => setScene(2)} />}
       {scene === 2 && <SceneRule key="s2" onNext={() => setScene(3)} />}
       {scene === 3 && <ScenePick key="s3" picked={picked} togglePick={togglePick} onNext={() => setScene(4)} />}
-      {scene === 4 && <SceneConfirm key="s4" picked={picked} onBack={() => setScene(3)} onConfirm={handleConfirm} />}
+      {scene === 4 && <SceneConfirm key="s4" picked={picked} onBack={() => setScene(3)} onNext={() => setScene(5)} />}
+      {scene === 5 && <SceneShikai key="s5" onRelease={handleRelease} />}
 
       <div className={'wipe ' + (closing ? 'run' : '')} />
     </div>
@@ -244,7 +245,7 @@ function BurnerCard({ burner, index, lit, disabled, onClick, isMobile }) {
   )
 }
 
-function SceneConfirm({ picked, onBack, onConfirm }) {
+function SceneConfirm({ picked, onBack, onNext }) {
   const isMobile = useIsMobile()
   const chosen = BURNERS.filter(b => picked.includes(b.id))
   const cut = BURNERS.filter(b => !picked.includes(b.id))
@@ -301,11 +302,87 @@ function SceneConfirm({ picked, onBack, onConfirm }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button className="btn ghost" onClick={onBack}>◂ change</button>
-        {!isMobile && <div className="hand" style={{ fontSize: 22, opacity: 0.75 }}>ready? this opens your daily log.</div>}
-        <button className="btn red" onClick={onConfirm}>Begin →</button>
+        {!isMobile && <div className="hand" style={{ fontSize: 22, opacity: 0.65 }}>one last thing before you begin...</div>}
+        <button className="btn red" onClick={onNext}>Name Your Season ▸</button>
       </div>
 
-      <KeyHandler onEnter={onConfirm} />
+      <KeyHandler onEnter={onNext} />
+    </div>
+  )
+}
+
+function SceneShikai({ onRelease }) {
+  const [name, setName] = useState('')
+  const inputRef = useRef(null)
+  const canRelease = name.trim().length >= 2
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 600)
+    return () => clearTimeout(t)
+  }, [])
+
+  const release = () => { if (canRelease) onRelease(name.trim()) }
+
+  return (
+    <div
+      className="stage scene-scroll"
+      style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: '8vh 10vw', gap: 0,
+      }}
+    >
+      <div className="speed-lines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.12 }} />
+
+      <div className="eyebrow reveal" style={{ opacity: 0.45, marginBottom: 40, animationDelay: '0.15s' }}>
+        // chapter 05 — shikai
+      </div>
+
+      <h2
+        className="display slide-up"
+        style={{
+          fontSize: 'clamp(26px, 4.5vw, 68px)',
+          textAlign: 'center',
+          margin: '0 0 56px',
+          lineHeight: 0.9,
+          animationDelay: '0.28s',
+        }}
+      >
+        WHAT IS THE NAME<br />
+        OF YOUR <span style={{ color: 'var(--red)' }}>SEASON?</span>
+      </h2>
+
+      <div className="slide-up" style={{ width: '100%', maxWidth: 580, animationDelay: '0.5s' }}>
+        <input
+          ref={inputRef}
+          className="shikai-input"
+          placeholder="NAME IT."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') release() }}
+          maxLength={42}
+          autoComplete="off"
+          spellCheck="false"
+        />
+      </div>
+
+      <div
+        className="slide-up hand"
+        style={{ marginTop: 18, opacity: 0.4, fontSize: 18, animationDelay: '0.65s', textAlign: 'center' }}
+      >
+        naming your season makes the commitment real.
+      </div>
+
+      <div className="slide-up" style={{ marginTop: 44, animationDelay: '0.8s' }}>
+        <button className="btn red" disabled={!canRelease} onClick={release}>
+          RELEASE ▸
+        </button>
+      </div>
+
+      <SFX className="hide-mobile" rotate={-9} size={80} top="8vh" right="7vw" color="var(--red)" style={{ opacity: 0.5 }}>
+        解放
+      </SFX>
     </div>
   )
 }

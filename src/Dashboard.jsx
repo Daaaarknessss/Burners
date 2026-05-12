@@ -1,34 +1,64 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { BURNERS, BurnerArt, MiniFlame, SFX, HalftoneCorner } from './components'
 import { useIsMobile } from './hooks'
+import { getSupabase } from './lib/supabase/client'
+import { getEntries, addEntry as dbAddEntry, deleteEntry as dbDeleteEntry } from './lib/supabase/entries'
+import { getStreak } from './lib/supabase/streak'
 
-const STORAGE_KEY = 'burners.v1'
-
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null } catch { return null }
-}
-function saveState(s) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch {}
+function normaliseEntry(row) {
+  return {
+    id:        row.id,
+    burnerId:  row.burner_id,
+    action:    row.action,
+    note:      row.note,
+    intensity: row.intensity,
+    tags:      row.tags ?? [],
+    day:       row.day,
+    createdAt: new Date(row.created_at).getTime(),
+  }
 }
 
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
-export default function Dashboard({ chosen, onReset }) {
+// ── Quick-tap action presets per burner ──
+const BURNER_ACTIONS = {
+  family:  ['Quality time', 'Deep talk', 'Dinner together', 'Helped out', 'Called them', 'Date night', 'Resolved conflict', 'Made memories'],
+  friends: ['Hung out', 'Called / texted', 'Deep talk', 'Supported them', 'Planned something', 'Made memories', 'Laughed hard', 'Long catch-up'],
+  health:  ['Workout', 'Walk / run', 'Meditated', 'Good sleep', 'Healthy meal', 'Rest day', 'Stretched', 'Morning routine'],
+  work:    ['Deep work', 'Shipped it', 'Learned something', 'Long session', 'Meeting', 'Planning', 'Side project', 'Problem solved'],
+}
+
+const CONTEXT_TAGS = ['FOCUSED', 'TIRED', 'INSPIRED', 'TOUGH', 'PROUD', 'SOLO', 'TOGETHER', 'SHORT', 'LONG', 'RUSHED']
+
+const INTENSITY_LABELS = { 1: 'LIGHT', 2: 'LOW', 3: 'MED', 4: 'HIGH', 5: 'MAX' }
+
+export default function Dashboard({ chosen, shikaiName, onReset }) {
   const isMobile = useIsMobile()
-  const initial = loadState()
-  const [entries, setEntries] = useState(initial?.entries || [])
-  const [streak] = useState(initial?.streak || 1)
+  const [entries, setEntries] = useState([])
+  const [streak, setStreak] = useState(1)
   const [mobileTab, setMobileTab] = useState('log')
+  const supabase = getSupabase()
 
   useEffect(() => {
-    saveState({ chosen, entries, streak })
-  }, [chosen, entries, streak])
+    getEntries(supabase, { from: new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10) })
+      .then(rows => setEntries(rows.map(normaliseEntry)))
+      .catch(() => {})
+    getStreak(supabase).then(setStreak).catch(() => {})
+  }, [])
 
-  const addEntry = (e) => {
-    setEntries(prev => [{ ...e, id: crypto.randomUUID(), createdAt: Date.now() }, ...prev])
+  const addEntry = async (e) => {
+    try {
+      const row = await dbAddEntry(supabase, e)
+      setEntries(prev => [normaliseEntry(row), ...prev])
+    } catch {}
   }
-  const removeEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id))
+  const removeEntry = async (id) => {
+    try {
+      await dbDeleteEntry(supabase, id)
+      setEntries(prev => prev.filter(e => e.id !== id))
+    } catch {}
+  }
 
   const todays = entries.filter(e => e.day === todayKey())
   const chosenBurners = BURNERS.filter(b => chosen.includes(b.id))
@@ -36,13 +66,12 @@ export default function Dashboard({ chosen, onReset }) {
   return (
     <div
       className="dash-root paper-grain"
-      style={{ position: 'relative', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 18, padding: '22px 28px 18px' }}
+      style={{ height: '100%', position: 'relative', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 18, padding: '22px 28px 18px' }}
     >
-      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} entryCount={todays.length} isMobile={isMobile} />
+      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} entryCount={todays.length} isMobile={isMobile} shikaiName={shikaiName} />
 
       {isMobile ? (
         <>
-          {/* Tab bar */}
           <div className="mobile-tabs">
             <button
               className={`mobile-tab ${mobileTab === 'log' ? 'active' : ''}`}
@@ -58,16 +87,10 @@ export default function Dashboard({ chosen, onReset }) {
               ADD ENTRY
             </button>
           </div>
-
           <div className="dash-tab-panel">
             {mobileTab === 'log'
               ? <EntryList entries={todays} onRemove={removeEntry} />
-              : <Composer
-                  chosenBurners={chosenBurners}
-                  onAdd={addEntry}
-                  onSubmitSuccess={() => setMobileTab('log')}
-                  isMobile={isMobile}
-                />
+              : <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setMobileTab('log')} isMobile={isMobile} />
             }
           </div>
         </>
@@ -83,12 +106,20 @@ export default function Dashboard({ chosen, onReset }) {
   )
 }
 
-function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile }) {
+// ── Header ──────────────────────────────────────────────────────────────────
+
+function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shikaiName }) {
   const dateStr = fmtDate(new Date()).toUpperCase()
   return (
     <div className="dash-header reveal" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 18, alignItems: 'end' }}>
       <div style={{ position: 'relative' }}>
         <div className="eyebrow" style={{ opacity: 0.6 }}>// chapter 02 — the daily log</div>
+        {shikaiName && (
+          <div className="shikai-badge" style={{ marginTop: 5, marginBottom: 2 }}>
+            <span style={{ opacity: 0.55 }}>season</span>
+            <span style={{ color: 'var(--red)' }}>{shikaiName.toUpperCase()}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 18, marginTop: 6, flexWrap: 'wrap' }}>
           <div className="display dash-header-day" style={{ fontSize: 68, lineHeight: 0.85 }}>
             DAY <span style={{ color: 'var(--red)' }}>{String(streak).padStart(2, '0')}</span>
@@ -101,7 +132,7 @@ function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile }) {
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <div className="panel-sm" style={{ padding: '8px 14px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="panel-sm" style={{ padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {!isMobile && <div className="eyebrow" style={{ opacity: 0.6 }}>burning</div>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {chosenBurners.map(b => (
@@ -119,6 +150,8 @@ function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile }) {
     </div>
   )
 }
+
+// ── Entry list ───────────────────────────────────────────────────────────────
 
 function EntryList({ entries, onRemove }) {
   return (
@@ -158,7 +191,9 @@ function EmptyState() {
 }
 
 function EntryCard({ entry, burner, onRemove, index }) {
-  const intensityBars = '█'.repeat(entry.intensity) + '░'.repeat(5 - entry.intensity)
+  // Split "action · tag1, tag2" for display
+  const [mainAction, tagStr] = entry.action.split(' · ')
+  const tags = tagStr ? tagStr.split(', ') : []
   return (
     <div className="panel-sm slide-up" style={{ padding: 14, display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, animationDelay: `${index * 0.04}s`, alignItems: 'start' }}>
       <div style={{ display: 'grid', placeItems: 'center', padding: 6, border: '3px solid var(--ink)', background: 'var(--paper-2)' }}>
@@ -166,28 +201,49 @@ function EntryCard({ entry, burner, onRemove, index }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-          <div className="display" style={{ fontSize: 20, color: 'var(--red)' }}>{burner?.label}</div>
+          <div className="display" style={{ fontSize: 18, color: 'var(--red)' }}>{burner?.label}</div>
           <div className="mono" style={{ fontSize: 10, opacity: 0.5 }}>
             {new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </div>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 500, marginTop: 2 }}>{entry.action}</div>
-        {entry.note && <div className="hand" style={{ fontSize: 18, marginTop: 4, lineHeight: 1.1, opacity: 0.85 }}>{entry.note}</div>}
-        <div className="mono" style={{ fontSize: 11, marginTop: 6, letterSpacing: '0.12em', color: 'var(--red-deep)' }}>
-          {intensityBars} {entry.intensity}/5
+        <div style={{ fontSize: 15, fontWeight: 600, marginTop: 3 }}>{mainAction}</div>
+        {tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+            {tags.map(t => (
+              <span key={t} style={{ fontFamily: '"Special Elite", monospace', fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '2px 6px', border: '1.5px solid var(--ink)', opacity: 0.65 }}>{t}</span>
+            ))}
+          </div>
+        )}
+        {entry.note && <div className="hand" style={{ fontSize: 18, marginTop: 5, lineHeight: 1.1, opacity: 0.8 }}>{entry.note}</div>}
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+          {[1,2,3,4,5].map(n => (
+            <div key={n} style={{ width: 18, height: 10, border: '1.5px solid var(--ink)', background: n <= entry.intensity ? 'var(--red)' : 'transparent', transition: 'background 0ms' }} />
+          ))}
+          <span className="mono" style={{ fontSize: 9, opacity: 0.55, marginLeft: 4 }}>{INTENSITY_LABELS[entry.intensity]}</span>
         </div>
       </div>
-      <button className="btn ghost sm" onClick={onRemove} style={{ fontSize: 12, padding: '4px 10px' }} title="remove">✕</button>
+      <button className="btn ghost sm" onClick={onRemove} style={{ fontSize: 11, padding: '4px 8px' }} title="remove">✕</button>
     </div>
   )
 }
 
+// ── Composer — tap-first, no text fields by default ──────────────────────────
+
 function Composer({ chosenBurners, onAdd, onSubmitSuccess, isMobile }) {
   const [burnerId, setBurnerId] = useState(chosenBurners[0]?.id || '')
-  const [action, setAction] = useState('')
-  const [note, setNote] = useState('')
+  const [selectedAction, setSelectedAction] = useState(null) // preset string or 'custom'
+  const [customText, setCustomText] = useState('')
   const [intensity, setIntensity] = useState(3)
-  const inputRef = useRef(null)
+  const [activeTags, setActiveTags] = useState([])
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const customRef = useRef(null)
+
+  // Reset action when burner changes
+  useEffect(() => {
+    setSelectedAction(null)
+    setCustomText('')
+  }, [burnerId])
 
   useEffect(() => {
     if (!chosenBurners.find(b => b.id === burnerId)) {
@@ -195,50 +251,67 @@ function Composer({ chosenBurners, onAdd, onSubmitSuccess, isMobile }) {
     }
   }, [chosenBurners])
 
-  const submit = () => {
-    if (!action.trim() || !burnerId) return
-    onAdd({ burnerId, action: action.trim(), note: note.trim(), intensity, day: todayKey() })
-    setAction('')
+  useEffect(() => {
+    if (selectedAction === 'custom') customRef.current?.focus()
+  }, [selectedAction])
+
+  const actions = BURNER_ACTIONS[burnerId] || []
+  const canSubmit = selectedAction && (selectedAction !== 'custom' || customText.trim())
+
+  const submit = async () => {
+    if (!canSubmit) return
+    const actionStr = selectedAction === 'custom' ? customText.trim() : selectedAction
+    const tagStr = activeTags.length ? ' · ' + activeTags.join(', ') : ''
+    await onAdd({ burnerId, action: actionStr + tagStr, note: note.trim(), intensity, day: todayKey() })
+    setSelectedAction(null)
+    setCustomText('')
+    setActiveTags([])
     setNote('')
+    setNoteOpen(false)
     setIntensity(3)
     onSubmitSuccess?.()
-    if (!onSubmitSuccess) inputRef.current?.focus()
   }
 
+  const toggleTag = (tag) => setActiveTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])
+
   return (
-    <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: 0, position: 'relative' }}>
+    <div
+      className="panel reveal"
+      style={isMobile
+        ? { padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }
+        : { padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: 0, position: 'relative' }}
+    >
       <HalftoneCorner corner="br" size={120} />
 
+      {/* Header */}
       <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }}>
         <div className="eyebrow" style={{ opacity: 0.7 }}>// new entry</div>
         <div className="display" style={{ fontSize: 30 }}>FEED A FLAME</div>
       </div>
 
-      <div className="scroll" style={{ padding: isMobile ? 16 : 20, display: 'grid', gap: 16, alignContent: 'start' }}>
-        {/* burner selector */}
+      {/* Body — scrolls via page on mobile, inner scroll on desktop */}
+      <div className={isMobile ? '' : 'scroll'} style={{ padding: isMobile ? 16 : 18, display: 'grid', gap: 22, alignContent: 'start' }}>
+
+        {/* ① Burner selector */}
         <div>
           <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>tag the burner</div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${chosenBurners.length}, 1fr)`, gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${chosenBurners.length}, 1fr)`, gap: 8 }}>
             {chosenBurners.map(b => {
               const active = b.id === burnerId
               return (
-                <button
-                  key={b.id}
-                  onClick={() => setBurnerId(b.id)}
-                  style={{
-                    all: 'unset', cursor: 'pointer',
-                    border: '3px solid var(--ink)',
-                    boxShadow: active ? '4px 4px 0 0 var(--ink)' : '2px 2px 0 0 var(--ink)',
-                    background: active ? 'var(--red)' : 'var(--paper)',
-                    color: active ? 'var(--paper)' : 'var(--ink)',
-                    padding: '10px 12px', transition: 'all 180ms',
-                    transform: active ? 'translate(-2px,-2px)' : 'translate(0,0)',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}
-                >
-                  <BurnerArt ignited={active} size={32} />
+                <button key={b.id} onClick={() => setBurnerId(b.id)} style={{
+                  all: 'unset', cursor: 'pointer',
+                  border: '3px solid var(--ink)',
+                  boxShadow: active ? '4px 4px 0 0 var(--ink)' : '2px 2px 0 0 var(--ink)',
+                  background: active ? 'var(--red)' : 'var(--paper)',
+                  color: active ? 'var(--paper)' : 'var(--ink)',
+                  padding: '10px 12px', transition: 'all 180ms',
+                  transform: active ? 'translate(-2px,-2px)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <BurnerArt ignited={active} size={28} />
                   <div style={{ display: 'grid' }}>
-                    <span className="display" style={{ fontSize: 18, lineHeight: 1 }}>{b.label}</span>
+                    <span className="display" style={{ fontSize: 16, lineHeight: 1 }}>{b.label}</span>
                     <span className="mono" style={{ fontSize: 10, opacity: 0.7 }}>{b.kana}</span>
                   </div>
                 </button>
@@ -247,49 +320,200 @@ function Composer({ chosenBurners, onAdd, onSubmitSuccess, isMobile }) {
           </div>
         </div>
 
+        {/* ② Action grid — tap to pick */}
         <div>
-          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>what did you do?</div>
-          <input
-            ref={inputRef}
-            className="ink-input"
-            placeholder="e.g. 90 min deep work on the pitch deck"
-            value={action}
-            onChange={e => setAction(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
-          />
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>what did you do?</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {actions.map(action => {
+              const active = selectedAction === action
+              return (
+                <button
+                  key={action}
+                  onClick={() => setSelectedAction(active ? null : action)}
+                  style={{
+                    all: 'unset', cursor: 'pointer',
+                    border: `3px solid var(--ink)`,
+                    background: active ? 'var(--ink)' : 'var(--paper)',
+                    color: active ? 'var(--paper)' : 'var(--ink)',
+                    boxShadow: active ? '4px 4px 0 0 var(--red)' : '2px 2px 0 0 var(--ink)',
+                    padding: '11px 13px',
+                    transition: 'all 160ms cubic-bezier(.2,.7,.2,1)',
+                    transform: active ? 'translate(-2px,-2px)' : 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.2 }}>{action}</span>
+                  {active && <span className="display" style={{ fontSize: 14, color: 'var(--red)', flexShrink: 0 }}>✓</span>}
+                </button>
+              )
+            })}
+            {/* Custom text fallback */}
+            <button
+              onClick={() => setSelectedAction(selectedAction === 'custom' ? null : 'custom')}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                border: '2px dashed var(--ink)',
+                background: selectedAction === 'custom' ? 'var(--paper-2)' : 'transparent',
+                color: 'var(--ink)', opacity: 0.6,
+                padding: '11px 13px', transition: 'all 160ms',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
+              <span className="mono" style={{ fontSize: 11 }}>custom</span>
+            </button>
+          </div>
+
+          {/* Custom text input — only shows if "custom" selected */}
+          {selectedAction === 'custom' && (
+            <input
+              ref={customRef}
+              className="ink-input"
+              placeholder="describe what you did..."
+              value={customText}
+              onChange={e => setCustomText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit() }}
+              style={{ marginTop: 8 }}
+            />
+          )}
         </div>
 
+        {/* ③ Intensity — 5 tap targets, no slider */}
         <div>
-          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>note <span style={{ opacity: 0.5 }}>(optional)</span></div>
-          <textarea
-            className="ink-input"
-            placeholder="how did it feel?"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            rows={2}
-          />
-        </div>
-
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
             <div className="eyebrow" style={{ opacity: 0.6 }}>intensity</div>
-            <div className="mono" style={{ fontSize: 12, color: 'var(--red-deep)', letterSpacing: '0.12em' }}>
-              {'█'.repeat(intensity)}{'░'.repeat(5 - intensity)} {intensity}/5
+            <div className="mono" style={{ fontSize: 11, color: 'var(--red-deep)', letterSpacing: '0.15em' }}>
+              {INTENSITY_LABELS[intensity]}
             </div>
           </div>
-          <input className="ink" type="range" min={1} max={5} step={1} value={intensity} onChange={e => setIntensity(Number(e.target.value))} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+            {[1, 2, 3, 4, 5].map(n => {
+              const filled = n <= intensity
+              return (
+                <button
+                  key={n}
+                  onClick={() => setIntensity(n)}
+                  style={{
+                    all: 'unset', cursor: 'pointer',
+                    border: '3px solid var(--ink)',
+                    background: filled ? (n === 5 ? 'var(--red)' : 'var(--ink)') : 'var(--paper)',
+                    color: filled ? 'var(--paper)' : 'var(--ink)',
+                    padding: '12px 0',
+                    textAlign: 'center',
+                    transition: 'all 120ms cubic-bezier(.2,.7,.2,1)',
+                    display: 'grid', placeItems: 'center',
+                  }}
+                >
+                  <div className="display" style={{ fontSize: 20, lineHeight: 1 }}>{n}</div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ④ Context tags — optional toggles */}
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>
+            context <span style={{ opacity: 0.45, textTransform: 'none', letterSpacing: 0, fontFamily: '"DM Sans", sans-serif' }}>(optional)</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CONTEXT_TAGS.map(tag => {
+              const active = activeTags.includes(tag)
+              return (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  style={{
+                    all: 'unset', cursor: 'pointer',
+                    border: '2px solid var(--ink)',
+                    background: active ? 'var(--ink)' : 'transparent',
+                    color: active ? 'var(--paper)' : 'var(--ink)',
+                    padding: '5px 10px',
+                    transition: 'all 140ms',
+                    fontFamily: '"Special Elite", monospace',
+                    fontSize: 10, letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {tag}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ⑤ Note — collapsed by default */}
+        <div>
+          {!noteOpen ? (
+            <button
+              onClick={() => setNoteOpen(true)}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                fontFamily: '"Caveat", cursive', fontSize: 20,
+                opacity: 0.5,
+                borderBottom: '2px dashed var(--ink)',
+                paddingBottom: 2,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>＋</span> add a note...
+            </button>
+          ) : (
+            <div>
+              <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 6 }}>note</div>
+              <textarea
+                className="ink-input"
+                placeholder="how did it feel?"
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                rows={2}
+                autoFocus
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ padding: 16, borderTop: '3px solid var(--ink)', background: 'var(--paper-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {!isMobile && <span className="mono" style={{ fontSize: 11, opacity: 0.55 }}>⌘ + ↵ to submit</span>}
-        <button className="btn red" disabled={!action.trim()} onClick={submit} style={isMobile ? { width: '100%', justifyContent: 'center' } : {}}>
+      {/* Footer */}
+      <div style={{
+        padding: '14px 16px',
+        borderTop: '3px solid var(--ink)',
+        background: canSubmit ? 'var(--ink)' : 'var(--paper-2)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+        transition: 'background 280ms',
+        marginTop: isMobile ? 0 : undefined,
+      }}>
+        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+          {canSubmit ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--paper)', opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {selectedAction === 'custom' ? customText : selectedAction}
+              </span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }}>·</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--paper)', opacity: 0.7 }}>{INTENSITY_LABELS[intensity]}</span>
+              {activeTags.length > 0 && <>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }}>·</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--paper)', opacity: 0.6 }}>{activeTags.length} tag{activeTags.length > 1 ? 's' : ''}</span>
+              </>}
+            </div>
+          ) : (
+            <span className="mono" style={{ fontSize: 10, opacity: 0.4 }}>pick an action above</span>
+          )}
+        </div>
+        <button
+          className="btn red"
+          disabled={!canSubmit}
+          onClick={submit}
+          style={isMobile ? { flexShrink: 0 } : {}}
+        >
           LOG IT ▸
         </button>
       </div>
     </div>
   )
 }
+
+// ── Week strip ───────────────────────────────────────────────────────────────
 
 function WeekStrip({ entries, chosenBurners, isMobile }) {
   const days = useMemo(() => {
@@ -325,10 +549,10 @@ function WeekStrip({ entries, chosenBurners, isMobile }) {
               return (
                 <div key={k} style={{
                   border: '2px solid var(--ink)', height: 30,
-                  background: heat === 0 ? 'var(--paper)' : `oklch(0.58 0.20 28 / ${alpha})`,
+                  background: heat === 0 ? 'var(--paper)' : `oklch(0.52 0.24 18 / ${alpha})`,
                   display: 'grid', placeItems: 'center',
                 }}>
-                  <div className="mono" style={{ fontSize: 8, opacity: 0.7, color: heat > 8 ? 'var(--paper)' : 'var(--ink)' }}>{dayLabel(d, idx)}</div>
+                  <div className="mono" style={{ fontSize: 8, opacity: 0.7, color: 'var(--ink)' }}>{dayLabel(d, idx)}</div>
                 </div>
               )
             })}

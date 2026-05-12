@@ -1,4 +1,5 @@
 /* === BURNERS — manga ink system === */
+/* Light mode (default) */
 :root{
   --ink: #0a0a0a;
   --paper: #f6f3ec;
@@ -7,6 +8,8 @@
   --red: oklch(0.58 0.20 28);
   --red-deep: oklch(0.42 0.18 28);
   --red-soft: oklch(0.92 0.05 28);
+  --btn-red-text: var(--paper);
+  --overlay-grain: rgba(10,10,10,0.05);
   --shadow: 8px 8px 0 0 var(--ink);
   --shadow-sm: 4px 4px 0 0 var(--ink);
   --shadow-xs: 2px 2px 0 0 var(--ink);
@@ -15,6 +18,19 @@
   --t-fast: 240ms cubic-bezier(.2,.7,.2,1);
   --t-med: 480ms cubic-bezier(.2,.7,.2,1);
   --t-slow: 760ms cubic-bezier(.2,.7,.2,1);
+}
+
+/* Dark mode — TYBW */
+[data-theme="dark"]{
+  --ink: #e8e3d8;
+  --paper: #0d0d0f;
+  --paper-2: #131318;
+  --paper-3: #1a1a20;
+  --red: oklch(0.52 0.24 18);
+  --red-deep: oklch(0.36 0.20 18);
+  --red-soft: oklch(0.20 0.08 18);
+  --btn-red-text: var(--ink);
+  --overlay-grain: rgba(232,227,216,0.04);
 }
 
 *,*::before,*::after{ box-sizing: border-box; }
@@ -41,12 +57,21 @@ body{
   background-image: radial-gradient(circle at center, rgba(10,10,10,0.55) 30%, transparent 32%);
   background-size: 6px 6px;
 }
+[data-theme="dark"] .halftone-soft{
+  background-image: radial-gradient(circle at center, rgba(232,227,216,0.28) 30%, transparent 32%);
+}
 .paper-grain{
   background-color: var(--paper);
   background-image:
     radial-gradient(circle at 20% 15%, rgba(10,10,10,0.035) 0, transparent 45%),
     radial-gradient(circle at 80% 80%, rgba(10,10,10,0.04) 0, transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(10,10,10,0.02) 0, transparent 60%);
+}
+[data-theme="dark"] .paper-grain{
+  background-image:
+    radial-gradient(circle at 20% 15%, rgba(232,227,216,0.04) 0, transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(232,227,216,0.05) 0, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(232,227,216,0.02) 0, transparent 60%);
 }
 .speed-lines{
   background:
@@ -108,7 +133,7 @@ body{
 .btn:hover{ transform: translate(-2px,-2px); box-shadow: 6px 6px 0 0 var(--ink); }
 .btn:active{ transform: translate(2px,2px); box-shadow: 0 0 0 0 var(--ink); }
 .btn.ghost{ background: var(--paper); color: var(--ink); }
-.btn.red{ background: var(--red); color: var(--paper); }
+.btn.red{ background: var(--red); color: var(--btn-red-text); }
 .btn.sm{ font-size: 14px; padding: 8px 16px; }
 .btn:disabled{ background: var(--paper-3); color: rgba(10,10,10,0.4); cursor: not-allowed; transform: none; box-shadow: var(--shadow-xs); }
 
@@ -238,6 +263,45 @@ input[type="range"].ink::-moz-range-thumb{
 .ink-input:focus{ box-shadow: var(--shadow-sm); transform: translate(-1px,-1px); }
 textarea.ink-input{ resize: none; font-family: "Caveat", cursive; font-size: 22px; line-height: 1.25; }
 
+/* === SHIKAI — season name input === */
+.shikai-input{
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid var(--ink);
+  font-family: "Anton", sans-serif;
+  font-size: clamp(26px, 5vw, 54px);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--red);
+  text-align: center;
+  outline: none;
+  width: 100%;
+  padding: 14px 0;
+  transition: border-color var(--t-fast);
+}
+.shikai-input::placeholder{
+  color: var(--ink);
+  opacity: 0.22;
+}
+.shikai-input:focus{
+  border-bottom-color: var(--red);
+}
+
+/* === SHIKAI badge in dashboard header === */
+.shikai-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 2px solid var(--red-deep);
+  font-family: "Special Elite", monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--red);
+  opacity: 0.85;
+}
+
 /* corner-stamp */
 .stamp{
   position: absolute;
@@ -366,18 +430,24 @@ textarea.ink-input{ resize: none; font-family: "Caveat", cursive; font-size: 22p
     line-height: 1;
   }
 
-  /* Mobile tab panel fills remaining space */
+  /* Mobile tab panel — natural height, page scroll handles the rest */
   .dash-tab-panel {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
 
   .dash-tab-panel .panel,
   .dash-tab-panel .panel.reveal {
-    flex: 1;
-    min-height: 320px;
+    display: flex !important;
+    flex-direction: column;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  /* Composer body must not clip on mobile */
+  .dash-tab-panel .scroll {
+    overflow: visible !important;
+    height: auto !important;
   }
 
   /* Week strip: label above, heat rows scroll horizontally */
