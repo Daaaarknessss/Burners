@@ -704,7 +704,7 @@ function BondsPanel({ userId, isMobile }) {
         )}
 
         {/* ── Outgoing pending ── */}
-        {isUnlocked && outgoing.length > 0 && (
+        {outgoing.length > 0 && (
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>waiting on reply</div>
             <div style={{ display: 'grid', gap: 8 }}>
@@ -718,10 +718,9 @@ function BondsPanel({ userId, isMobile }) {
           </div>
         )}
 
-        {/* ── Add partner ── */}
-        {isUnlocked && (
-          <div>
-            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>invite by email</div>
+        {/* ── Add partner ── always visible so users can initiate the first request ── */}
+        <div>
+            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>add by email</div>
             <form onSubmit={sendRequest} style={{ display: 'grid', gap: 8 }}>
               <input
                 className="ink-input"
@@ -738,7 +737,6 @@ function BondsPanel({ userId, isMobile }) {
               </button>
             </form>
           </div>
-        )}
 
       </div>
     </div>
