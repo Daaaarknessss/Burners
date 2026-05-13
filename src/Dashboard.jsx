@@ -129,7 +129,7 @@ function DashHeader({ chosenBurners, streak, onReset, onLogout, entryCount, isMo
         )}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 18, marginTop: 6, flexWrap: 'wrap' }}>
           <div className="display dash-header-day" style={{ fontSize: 68, lineHeight: 0.85 }}>
-            DAY <span style={{ color: 'var(--red)' }}>{String(streak).padStart(2, '0')}</span>
+            DAY <span style={{ color: 'var(--red)' }}>{String(Math.max(streak, 1)).padStart(2, '0')}</span>
           </div>
           <div className="mono" style={{ fontSize: 12, opacity: 0.6 }}>{dateStr}</div>
         </div>
