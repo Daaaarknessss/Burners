@@ -555,11 +555,11 @@ function HealthBar({ value }) {
   )
 }
 
-function PartnerCard({ partnership, userId }) {
+function PartnerCard({ partnership, userId, profileCache = {} }) {
   const [health, setHealth] = useState(null)
   const supabase = getSupabase()
   const partnerId = partnership.requester_id === userId ? partnership.partner_id : partnership.requester_id
-  const profile   = partnership.requester_id === userId ? partnership.partner  : partnership.requester
+  const profile   = (partnership.requester_id === userId ? partnership.partner : partnership.requester) || profileCache[partnerId]
 
   useEffect(() => {
     getPartnerHealth(supabase, partnerId).then(setHealth).catch(() => setHealth(0))
@@ -591,6 +591,7 @@ function PartnerCard({ partnership, userId }) {
 function BondsPanel({ userId, username, isMobile }) {
   const [partnerships, setPartnerships] = useState([])
   const [loading, setLoading]           = useState(true)
+  const [profileCache, setProfileCache] = useState({}) // partnerId → {username, shikai_name}
   const [query, setQuery]               = useState('')
   const [results, setResults]           = useState([])
   const [selected, setSelected]         = useState(null)
@@ -603,7 +604,19 @@ function BondsPanel({ userId, username, isMobile }) {
 
   const reload = () => {
     setLoading(true)
-    getPartnerships(supabase).then(setPartnerships).catch(() => {}).finally(() => setLoading(false))
+    getPartnerships(supabase)
+      .then(rows => {
+        setPartnerships(rows)
+        // seed cache from any profiles that came back with the join
+        const extra = {}
+        rows.forEach(p => {
+          if (p.requester_id !== userId && p.requester?.username) extra[p.requester_id] = p.requester
+          if (p.partner_id   !== userId && p.partner?.username)   extra[p.partner_id]   = p.partner
+        })
+        if (Object.keys(extra).length) setProfileCache(prev => ({ ...prev, ...extra }))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { reload() }, [])
@@ -645,6 +658,7 @@ function BondsPanel({ userId, username, isMobile }) {
     setSending(true)
     try {
       await requestPartnership(supabase, selected.id)
+      setProfileCache(prev => ({ ...prev, [selected.id]: { username: selected.username, shikai_name: selected.shikai_name } }))
       setQuery('')
       setSelected(null)
       setSendOk(true)
@@ -697,7 +711,7 @@ function BondsPanel({ userId, username, isMobile }) {
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 12 }}>active bonds</div>
             <div style={{ display: 'grid', gap: 10 }}>
-              {active.map(p => <PartnerCard key={p.id} partnership={p} userId={userId} />)}
+              {active.map(p => <PartnerCard key={p.id} partnership={p} userId={userId} profileCache={profileCache} />)}
             </div>
           </div>
         )}
@@ -713,7 +727,7 @@ function BondsPanel({ userId, username, isMobile }) {
             </div>
             <div style={{ display: 'grid', gap: 8 }}>
               {incoming.map(p => {
-                const from = p.requester
+                const from = p.requester || profileCache[p.requester_id]
                 return (
                   <div key={p.id} className="panel-sm" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
@@ -736,15 +750,17 @@ function BondsPanel({ userId, username, isMobile }) {
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>waiting on reply</div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {outgoing.map(p => (
+              {outgoing.map(p => {
+                const prof = p.partner || profileCache[p.partner_id]
+                return (
                 <div key={p.id} className="panel-sm" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                   <div>
-                    <div className="display" style={{ fontSize: 15 }}>{p.partner?.username ? `@${p.partner.username}` : '(no handle)'}</div>
-                    {p.partner?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {p.partner.shikai_name}</div>}
+                    <div className="display" style={{ fontSize: 15 }}>{prof?.username ? `@${prof.username}` : '(no handle)'}</div>
+                    {prof?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {prof.shikai_name}</div>}
                   </div>
                   <button className="btn ghost sm" onClick={async () => { await removePartnership(supabase, p.id).catch(() => {}); reload() }} style={{ fontSize: 10, padding: '4px 8px', opacity: 0.6 }}>cancel</button>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
