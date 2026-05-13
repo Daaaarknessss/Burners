@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { signIn, signUp } from './lib/supabase/auth'
+import { updateProfile } from './lib/supabase/profile'
 import { HalftoneCorner } from './components'
 
 export default function AuthGate({ supabase }) {
   const [mode, setMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
+  const [usernameError, setUsernameError] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [awaitingConfirm, setAwaitingConfirm] = useState(false)
@@ -14,18 +17,37 @@ export default function AuthGate({ supabase }) {
   const submit = async (e) => {
     e.preventDefault()
     setError(null)
-    setLoading(true)
-    try {
-      if (isSignUp) {
-        const result = await signUp(supabase, { email, password })
-        if (!result.session) setAwaitingConfirm(true)
-      } else {
-        await signIn(supabase, { email, password })
+    setUsernameError(null)
+
+    if (isSignUp) {
+      const uname = username.trim().toLowerCase()
+      if (!/^[a-z0-9_]{3,20}$/.test(uname)) {
+        setUsernameError('3–20 chars, letters / numbers / underscore only')
+        return
       }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      setLoading(true)
+      try {
+        const result = await signUp(supabase, { email, password })
+        if (result.session) {
+          try { await updateProfile(supabase, { username: uname }) } catch {}
+        } else {
+          sessionStorage.setItem('pending_username', uname)
+          setAwaitingConfirm(true)
+        }
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      setLoading(true)
+      try {
+        await signIn(supabase, { email, password })
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -73,6 +95,30 @@ export default function AuthGate({ supabase }) {
               autoComplete="email"
             />
           </div>
+
+          {isSignUp && (
+            <div>
+              <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 6 }}>username</div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div className="mono" style={{ fontSize: 18, padding: '8px 10px', background: 'var(--ink)', color: 'var(--paper)', lineHeight: 1, flexShrink: 0 }}>@</div>
+                <input
+                  className="ink-input"
+                  type="text"
+                  placeholder="yourhandle"
+                  value={username}
+                  onChange={e => { setUsername(e.target.value.toLowerCase()); setUsernameError(null) }}
+                  required
+                  maxLength={20}
+                  autoComplete="off"
+                  style={{ flex: 1 }}
+                />
+              </div>
+              {usernameError && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--red)', marginTop: 5 }}>{usernameError}</div>
+              )}
+            </div>
+          )}
+
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 6 }}>password</div>
             <input

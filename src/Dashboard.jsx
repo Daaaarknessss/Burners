@@ -34,7 +34,7 @@ const CONTEXT_TAGS = ['FOCUSED', 'TIRED', 'INSPIRED', 'TOUGH', 'PROUD', 'SOLO', 
 
 const INTENSITY_LABELS = { 1: 'LIGHT', 2: 'LOW', 3: 'MED', 4: 'HIGH', 5: 'MAX' }
 
-export default function Dashboard({ chosen, shikaiName, onReset, onLogout, userId }) {
+export default function Dashboard({ chosen, shikaiName, username, onReset, onLogout, userId }) {
   const isMobile = useIsMobile()
   const [entries, setEntries] = useState([])
   const [streak, setStreak] = useState(1)
@@ -96,12 +96,12 @@ export default function Dashboard({ chosen, shikaiName, onReset, onLogout, userI
           <div className="dash-tab-panel">
             {mobileTab === 'log' && <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />}
             {mobileTab === 'add' && <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => { setMobileTab('log'); setSelectedDay(todayKey()) }} isMobile={isMobile} />}
-            {mobileTab === 'bonds' && <BondsPanel userId={userId} isMobile={isMobile} />}
+            {mobileTab === 'bonds' && <BondsPanel userId={userId} username={username} isMobile={isMobile} />}
           </div>
         </>
       ) : (
         view === 'bonds'
-          ? <BondsPanel userId={userId} isMobile={isMobile} />
+          ? <BondsPanel userId={userId} username={username} isMobile={isMobile} />
           : <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
               <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
               <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setSelectedDay(todayKey())} isMobile={isMobile} />
@@ -586,12 +586,7 @@ function PartnerCard({ partnership, userId }) {
   )
 }
 
-function BondsPanel({ userId, isMobile }) {
-  const [myUsername, setMyUsername]     = useState(undefined) // undefined = loading
-  const [usernameInput, setUsernameInput] = useState('')
-  const [usernameError, setUsernameError] = useState(null)
-  const [savingUsername, setSavingUsername] = useState(false)
-
+function BondsPanel({ userId, username, isMobile }) {
   const [partnerships, setPartnerships] = useState([])
   const [loading, setLoading]           = useState(true)
   const [query, setQuery]               = useState('')
@@ -609,30 +604,7 @@ function BondsPanel({ userId, isMobile }) {
     getPartnerships(supabase).then(setPartnerships).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    supabase.from('profiles').select('username').eq('id', userId).single()
-      .then(({ data }) => setMyUsername(data?.username ?? null))
-      .catch(() => setMyUsername(null))
-    reload()
-  }, [])
-
-  const saveUsername = async (e) => {
-    e.preventDefault()
-    const val = usernameInput.trim().toLowerCase()
-    if (!/^[a-z0-9_]{3,20}$/.test(val)) {
-      setUsernameError('3–20 chars, letters / numbers / underscore only')
-      return
-    }
-    setSavingUsername(true)
-    setUsernameError(null)
-    const { error } = await supabase.from('profiles').update({ username: val }).eq('id', userId)
-    if (error) {
-      setUsernameError(error.code === '23505' ? 'Username already taken.' : error.message)
-    } else {
-      setMyUsername(val)
-    }
-    setSavingUsername(false)
-  }
+  useEffect(() => { reload() }, [])
 
   const active     = partnerships.filter(p => p.status === 'active')
   const incoming   = partnerships.filter(p => p.partner_id === userId && p.status === 'pending')
@@ -687,8 +659,7 @@ function BondsPanel({ userId, isMobile }) {
     reload()
   }
 
-  // ── Loading ──
-  if (myUsername === undefined || loading) {
+  if (loading) {
     return (
       <div className="panel reveal" style={{ padding: 28, display: 'grid', placeItems: 'center', minHeight: 200 }}>
         <div className="mono" style={{ opacity: 0.4, fontSize: 12, letterSpacing: '0.1em' }}>loading bonds...</div>
@@ -696,47 +667,6 @@ function BondsPanel({ userId, isMobile }) {
     )
   }
 
-  // ── Username setup gate ──
-  if (myUsername === null) {
-    return (
-      <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
-        <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }}>
-          <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
-          <div className="display" style={{ fontSize: 30 }}>BONDS</div>
-        </div>
-        <div style={{ padding: 28, display: 'grid', gap: 18, alignContent: 'start' }}>
-          <div>
-            <div className="display" style={{ fontSize: 22 }}>CHOOSE YOUR HANDLE</div>
-            <div className="hand" style={{ fontSize: 16, marginTop: 6, opacity: 0.65, lineHeight: 1.4 }}>
-              This is how other users find and recognise you.<br />
-              Pick something short and yours.
-            </div>
-          </div>
-          <form onSubmit={saveUsername} style={{ display: 'grid', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-              <div className="mono" style={{ fontSize: 18, padding: '8px 10px', background: 'var(--ink)', color: 'var(--paper)', lineHeight: 1 }}>@</div>
-              <input
-                className="ink-input"
-                type="text"
-                placeholder="yourhandle"
-                value={usernameInput}
-                onChange={e => { setUsernameInput(e.target.value); setUsernameError(null) }}
-                maxLength={20}
-                autoFocus
-                style={{ flex: 1 }}
-              />
-            </div>
-            {usernameError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)' }}>{usernameError}</div>}
-            <button type="submit" className="btn red sm" disabled={savingUsername || usernameInput.trim().length < 3} style={{ justifySelf: 'start' }}>
-              {savingUsername ? '...' : 'SET HANDLE ▸'}
-            </button>
-          </form>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Main bonds UI ──
   return (
     <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
       <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -744,7 +674,7 @@ function BondsPanel({ userId, isMobile }) {
           <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
           <div className="display" style={{ fontSize: 30 }}>BONDS</div>
         </div>
-        <div className="mono" style={{ fontSize: 11, opacity: 0.6, paddingBottom: 4 }}>@{myUsername}</div>
+        <div className="mono" style={{ fontSize: 11, opacity: 0.6, paddingBottom: 4 }}>@{username}</div>
       </div>
 
       <div className="scroll" style={{ padding: 20, display: 'grid', gap: 24, alignContent: 'start' }}>
