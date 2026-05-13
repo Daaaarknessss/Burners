@@ -849,9 +849,11 @@ function BondsPanel({ userId, username, isMobile, onViewPartner }) {
 // ── Partner log view ─────────────────────────────────────────────────────────
 
 function PartnerView({ partner, onBack }) {
-  const [entries, setEntries] = useState([])
-  const [health, setHealth]   = useState(null)
-  const [loading, setLoading] = useState(true)
+  const isMobile = useIsMobile()
+  const [entries, setEntries]     = useState([])
+  const [health, setHealth]       = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [selectedDay, setSelectedDay] = useState(todayKey())
   const supabase = getSupabase()
 
   useEffect(() => {
@@ -861,72 +863,70 @@ function PartnerView({ partner, onBack }) {
     ]).catch(() => {}).finally(() => setLoading(false))
   }, [partner.userId])
 
-  const byDay = useMemo(() => {
+  // Group entries by day for the week strip heat
+  const entriesByDay = useMemo(() => {
     const map = {}
-    entries.forEach(e => { map[e.day] = (map[e.day] || 0) + 1 })
+    entries.forEach(e => {
+      if (!map[e.day]) map[e.day] = []
+      map[e.day].push(e)
+    })
     return map
   }, [entries])
 
-  const last7 = useMemo(() => {
-    const today = new Date()
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today)
-      d.setDate(today.getDate() - (6 - i))
-      return d.toISOString().slice(0, 10)
-    })
-  }, [])
+  const selectedEntries = entriesByDay[selectedDay] || []
+  const isToday = selectedDay === todayKey()
+
+  // Unique burner IDs seen in entries (for heat strip)
+  const seenBurners = useMemo(() => {
+    const ids = [...new Set(entries.map(e => e.burnerId))]
+    return BURNERS.filter(b => ids.includes(b.id))
+  }, [entries])
+
+  const dayLabel = isToday
+    ? '// today'
+    : `// ${new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}`
 
   return (
-    <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0, height: '100%' }}>
+    <div className="dash-root" style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: 0, height: '100%', gap: 0 }}>
       {/* Header */}
-      <div style={{ padding: '14px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="dash-header reveal" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
         <div>
           <div className="eyebrow" style={{ opacity: 0.6 }}>// partner log</div>
-          <div className="display" style={{ fontSize: 26 }}>@{partner.username || '???'}</div>
-          {partner.shikaiName && <div className="mono" style={{ fontSize: 9, opacity: 0.5, marginTop: 2 }}>season // {partner.shikaiName}</div>}
-        </div>
-        <button className="btn ghost sm" onClick={onBack} style={{ background: 'var(--paper)', color: 'var(--ink)' }}>◂ BACK</button>
-      </div>
-
-      <div className="scroll" style={{ padding: '18px 20px', display: 'grid', gap: 20, alignContent: 'start' }}>
-        {/* Health */}
-        <div>
-          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>7-day health</div>
-          <HealthBar value={health} />
-        </div>
-
-        {/* Mini calendar — last 7 days */}
-        <div>
-          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>this week</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-            {last7.map(day => {
-              const count = byDay[day] || 0
-              const alpha = count === 0 ? 0 : Math.min(0.3 + count * 0.15, 1)
-              return (
-                <div key={day} style={{ textAlign: 'center' }}>
-                  <div style={{
-                    height: 32, border: '2px solid var(--ink)',
-                    background: count > 0 ? `oklch(0.52 0.24 18 / ${alpha})` : 'var(--paper)',
-                  }} />
-                  <div className="mono" style={{ fontSize: 7, opacity: 0.5, marginTop: 3 }}>
-                    {new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="display" style={{ fontSize: isMobile ? 32 : 48, lineHeight: 0.9, marginTop: 4 }}>
+            @{partner.username || '???'}
+          </div>
+          {partner.shikaiName && (
+            <div className="shikai-badge" style={{ marginTop: 6 }}>
+              <span style={{ opacity: 0.55 }}>season</span>
+              <span style={{ color: 'var(--red)' }}>{partner.shikaiName.toUpperCase()}</span>
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}>
+            <HealthBar value={health} />
           </div>
         </div>
+        <button className="btn ghost sm" onClick={onBack}>◂ BACK</button>
+      </div>
 
-        {/* Entry list */}
-        <div>
-          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>recent entries</div>
+      {/* Entry list for selected day */}
+      <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
+        <div style={{ padding: '14px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--paper-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div className="eyebrow" style={{ opacity: 0.6 }}>{dayLabel}</div>
+            <div className="display" style={{ fontSize: 26 }}>the log</div>
+          </div>
+          <div className="mono" style={{ fontSize: 10, opacity: 0.4 }}>{selectedEntries.length} {selectedEntries.length === 1 ? 'entry' : 'entries'}</div>
+        </div>
+        <div className="scroll" style={{ padding: 18 }}>
           {loading ? (
             <div className="mono" style={{ fontSize: 11, opacity: 0.4 }}>loading...</div>
-          ) : entries.length === 0 ? (
-            <div className="hand" style={{ fontSize: 17, opacity: 0.4 }}>no entries yet.</div>
+          ) : selectedEntries.length === 0 ? (
+            <div className="hand" style={{ fontSize: 17, opacity: 0.4 }}>
+              {isToday ? 'nothing logged today.' : 'nothing logged this day.'}
+            </div>
           ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {entries.map((e, i) => {
+            <div style={{ display: 'grid', gap: 12 }}>
+              {selectedEntries.map((e, i) => {
                 const b = BURNERS.find(x => x.id === e.burnerId)
                 return <EntryCard key={e.id} entry={e} burner={b} onRemove={null} index={i} />
               })}
@@ -934,6 +934,15 @@ function PartnerView({ partner, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Week strip */}
+      <WeekStrip
+        entries={entries}
+        chosenBurners={seenBurners.length ? seenBurners : BURNERS.slice(0, 1)}
+        isMobile={isMobile}
+        selectedDay={selectedDay}
+        onDaySelect={setSelectedDay}
+      />
     </div>
   )
 }
