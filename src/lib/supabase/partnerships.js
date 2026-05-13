@@ -1,15 +1,17 @@
-// Returns all partnerships for the current user (both directions), with partner profile joined
+// Returns all partnerships for the current user with profile data via SECURITY DEFINER RPC
+// (avoids RLS join issues on the profiles table)
 export async function getPartnerships(supabase) {
-  const { data, error } = await supabase
-    .from('partnerships')
-    .select(`
-      *,
-      requester:profiles!partnerships_requester_profile_fkey(id, username, shikai_name),
-      partner:profiles!partnerships_partner_profile_fkey(id, username, shikai_name)
-    `)
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_my_partnerships')
   if (error) throw error
-  return data
+  return (data ?? []).map(row => ({
+    id:           row.id,
+    requester_id: row.requester_id,
+    partner_id:   row.partner_id,
+    status:       row.status,
+    created_at:   row.created_at,
+    requester: { id: row.requester_id, username: row.requester_username, shikai_name: row.requester_shikai_name },
+    partner:   { id: row.partner_id,   username: row.partner_username,   shikai_name: row.partner_shikai_name   },
+  }))
 }
 
 // Search users by display_name or email prefix (min 2 chars)
