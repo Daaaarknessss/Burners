@@ -6,6 +6,7 @@ import { useTheme } from './hooks'
 import { getSupabase } from './lib/supabase/client'
 import { getSession, onAuthStateChange, signOut } from './lib/supabase/auth'
 import { getProfile, updateProfile } from './lib/supabase/profile'
+import { getMyHealth } from './lib/supabase/streak'
 
 function ThemeToggle({ theme, onToggle }) {
   return (
@@ -17,6 +18,29 @@ function ThemeToggle({ theme, onToggle }) {
     >
       {theme === 'dark' ? '☀ LIGHT' : '☾ DARK'}
     </button>
+  )
+}
+
+function SeasonEnded({ shikaiName, onContinue }) {
+  useEffect(() => {
+    const t = setTimeout(onContinue, 4000)
+    return () => clearTimeout(t)
+  }, [])
+  return (
+    <div className="stage" style={{ display: 'grid', placeItems: 'center', padding: '5vw' }}>
+      <div style={{ textAlign: 'center', display: 'grid', gap: 18 }}>
+        <div className="eyebrow" style={{ opacity: 0.5 }}>// season over</div>
+        <div className="display" style={{ fontSize: 72, lineHeight: 0.9, color: 'var(--red)' }}>SEASON<br />ENDED</div>
+        {shikaiName && (
+          <div className="hand" style={{ fontSize: 22, opacity: 0.6 }}>
+            {shikaiName.toUpperCase()} has fallen.
+          </div>
+        )}
+        <div className="mono" style={{ fontSize: 11, opacity: 0.35, letterSpacing: '0.15em' }}>
+          seven days. zero logs. the season is gone.
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -91,6 +115,8 @@ export default function App() {
   const [username, setUsername] = useState(null)
   const [session, setSession] = useState(undefined)
   const [transitioning, setTransitioning] = useState(false)
+  const [seasonDead, setSeasonDead] = useState(false)
+  const [deadSeasonName, setDeadSeasonName] = useState(null)
 
   useEffect(() => {
     const supabase = getSupabase()
@@ -113,6 +139,22 @@ export default function App() {
           }
         }
         setUsername(uname)
+
+        // Check if the season should die (7 days with no logs, after prior activity)
+        if (p.chosen_burners?.length) {
+          try {
+            const { season_dead } = await getMyHealth(supabase)
+            if (season_dead) {
+              const { data: { user } } = await supabase.auth.getUser()
+              setDeadSeasonName(p.shikai_name)
+              setSeasonDead(true)
+              await supabase.from('entries').delete().eq('user_id', user.id)
+              await updateProfile(supabase, { chosen_burners: [], shikai_name: null })
+              setChosen(null)
+              setShikaiName(null)
+            }
+          } catch {}
+        }
       } catch {}
     }
 
@@ -124,7 +166,7 @@ export default function App() {
     return onAuthStateChange(supabase, s => {
       setSession(s)
       if (s) loadProfile()
-      else { setChosen(null); setShikaiName(null); setUsername(null) }
+      else { setChosen(null); setShikaiName(null); setUsername(null); setSeasonDead(false) }
     })
   }, [])
 
@@ -159,11 +201,13 @@ export default function App() {
     <div className="stage paper-grain" data-screen-label={!session ? 'Auth' : !username ? 'Username' : chosen ? 'Dashboard' : 'Onboarding'}>
       {!session
         ? <AuthGate supabase={getSupabase()} />
-        : !username
-          ? <UsernameSetup onComplete={handleSetUsername} />
-          : chosen && chosen.length > 0
-            ? <Dashboard chosen={chosen} shikaiName={shikaiName} username={username} onReset={handleReset} onLogout={handleLogout} userId={session?.user?.id} />
-            : <Onboarding onComplete={handleComplete} />
+        : seasonDead
+          ? <SeasonEnded shikaiName={deadSeasonName} onContinue={() => setSeasonDead(false)} />
+          : !username
+            ? <UsernameSetup onComplete={handleSetUsername} />
+            : chosen && chosen.length > 0
+              ? <Dashboard chosen={chosen} shikaiName={shikaiName} username={username} onReset={handleReset} onLogout={handleLogout} userId={session?.user?.id} />
+              : <Onboarding onComplete={handleComplete} />
       }
       <div className={'wipe ' + (transitioning ? 'run' : '')} />
       <ThemeToggle theme={theme} onToggle={toggleTheme} />

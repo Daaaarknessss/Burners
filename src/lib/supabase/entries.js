@@ -47,3 +47,10 @@ export async function deleteEntry(supabase, id) {
     .eq('id', id)
   if (error) throw error
 }
+
+// Fetch an active partner's last 30 days of entries via SECURITY DEFINER RPC
+export async function getPartnerEntries(supabase, partnerUserId) {
+  const { data, error } = await supabase.rpc('get_partner_entries', { target_user_id: partnerUserId })
+  if (error) throw error
+  return data ?? []
+}

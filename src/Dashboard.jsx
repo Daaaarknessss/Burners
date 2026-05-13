@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { BURNERS, BurnerArt, MiniFlame, SFX, HalftoneCorner } from './components'
 import { useIsMobile } from './hooks'
 import { getSupabase } from './lib/supabase/client'
-import { getEntries, addEntry as dbAddEntry, deleteEntry as dbDeleteEntry } from './lib/supabase/entries'
+import { getEntries, addEntry as dbAddEntry, deleteEntry as dbDeleteEntry, getPartnerEntries } from './lib/supabase/entries'
 import { getStreak } from './lib/supabase/streak'
 import { getPartnerships, searchProfiles, requestPartnership, respondToPartnership, removePartnership, getPartnerHealth } from './lib/supabase/partnerships'
 
@@ -41,6 +41,7 @@ export default function Dashboard({ chosen, shikaiName, username, onReset, onLog
   const [mobileTab, setMobileTab] = useState('log')
   const [selectedDay, setSelectedDay] = useState(todayKey())
   const [view, setView] = useState('home')
+  const [partnerView, setPartnerView] = useState(null) // { userId, username, shikaiName }
   const supabase = getSupabase()
 
   useEffect(() => {
@@ -96,13 +97,19 @@ export default function Dashboard({ chosen, shikaiName, username, onReset, onLog
           <div className="dash-tab-panel">
             {mobileTab === 'log' && <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />}
             {mobileTab === 'add' && <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => { setMobileTab('log'); setSelectedDay(todayKey()) }} isMobile={isMobile} />}
-            {mobileTab === 'bonds' && <BondsPanel userId={userId} username={username} isMobile={isMobile} />}
+            {mobileTab === 'bonds' && (
+              partnerView
+                ? <PartnerView partner={partnerView} onBack={() => setPartnerView(null)} />
+                : <BondsPanel userId={userId} username={username} isMobile={isMobile} onViewPartner={setPartnerView} />
+            )}
           </div>
         </>
       ) : (
-        view === 'bonds'
-          ? <BondsPanel userId={userId} username={username} isMobile={isMobile} />
-          : <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
+        partnerView
+          ? <PartnerView partner={partnerView} onBack={() => setPartnerView(null)} />
+          : view === 'bonds'
+            ? <BondsPanel userId={userId} username={username} isMobile={isMobile} onViewPartner={setPartnerView} />
+            : <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
               <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
               <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setSelectedDay(todayKey())} isMobile={isMobile} />
             </div>
@@ -555,7 +562,7 @@ function HealthBar({ value }) {
   )
 }
 
-function PartnerCard({ partnership, userId, profileCache = {} }) {
+function PartnerCard({ partnership, userId, profileCache = {}, onView }) {
   const [health, setHealth] = useState(null)
   const supabase = getSupabase()
   const partnerId = partnership.requester_id === userId ? partnership.partner_id : partnership.requester_id
@@ -576,19 +583,26 @@ function PartnerCard({ partnership, userId, profileCache = {} }) {
             <div className="eyebrow" style={{ opacity: 0.55, marginTop: 2 }}>season // {profile.shikai_name}</div>
           )}
         </div>
-        <button
-          className="btn ghost sm"
-          onClick={async () => { await removePartnership(supabase, partnership.id).catch(() => {}) ; window.location.reload() }}
-          style={{ fontSize: 10, padding: '4px 8px', opacity: 0.5 }}
-          title="Remove bond"
-        >✕</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn ghost sm"
+            onClick={() => onView?.({ userId: partnerId, username: profile?.username, shikaiName: profile?.shikai_name })}
+            style={{ fontSize: 10, padding: '4px 8px' }}
+          >VIEW</button>
+          <button
+            className="btn ghost sm"
+            onClick={async () => { await removePartnership(supabase, partnership.id).catch(() => {}); window.location.reload() }}
+            style={{ fontSize: 10, padding: '4px 8px', opacity: 0.5 }}
+            title="Remove bond"
+          >✕</button>
+        </div>
       </div>
       <HealthBar value={health} />
     </div>
   )
 }
 
-function BondsPanel({ userId, username, isMobile }) {
+function BondsPanel({ userId, username, isMobile, onViewPartner }) {
   const [partnerships, setPartnerships] = useState([])
   const [loading, setLoading]           = useState(true)
   const [profileCache, setProfileCache] = useState({}) // partnerId → {username, shikai_name}
@@ -711,7 +725,7 @@ function BondsPanel({ userId, username, isMobile }) {
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 12 }}>active bonds</div>
             <div style={{ display: 'grid', gap: 10 }}>
-              {active.map(p => <PartnerCard key={p.id} partnership={p} userId={userId} profileCache={profileCache} />)}
+              {active.map(p => <PartnerCard key={p.id} partnership={p} userId={userId} profileCache={profileCache} onView={onViewPartner} />)}
             </div>
           </div>
         )}
@@ -827,6 +841,98 @@ function BondsPanel({ userId, username, isMobile }) {
           </form>
         </div>
 
+      </div>
+    </div>
+  )
+}
+
+// ── Partner log view ─────────────────────────────────────────────────────────
+
+function PartnerView({ partner, onBack }) {
+  const [entries, setEntries] = useState([])
+  const [health, setHealth]   = useState(null)
+  const [loading, setLoading] = useState(true)
+  const supabase = getSupabase()
+
+  useEffect(() => {
+    Promise.all([
+      getPartnerEntries(supabase, partner.userId).then(rows => setEntries(rows.map(normaliseEntry))),
+      getPartnerHealth(supabase, partner.userId).then(setHealth).catch(() => setHealth(0)),
+    ]).catch(() => {}).finally(() => setLoading(false))
+  }, [partner.userId])
+
+  const byDay = useMemo(() => {
+    const map = {}
+    entries.forEach(e => { map[e.day] = (map[e.day] || 0) + 1 })
+    return map
+  }, [entries])
+
+  const last7 = useMemo(() => {
+    const today = new Date()
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today)
+      d.setDate(today.getDate() - (6 - i))
+      return d.toISOString().slice(0, 10)
+    })
+  }, [])
+
+  return (
+    <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0, height: '100%' }}>
+      {/* Header */}
+      <div style={{ padding: '14px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.6 }}>// partner log</div>
+          <div className="display" style={{ fontSize: 26 }}>@{partner.username || '???'}</div>
+          {partner.shikaiName && <div className="mono" style={{ fontSize: 9, opacity: 0.5, marginTop: 2 }}>season // {partner.shikaiName}</div>}
+        </div>
+        <button className="btn ghost sm" onClick={onBack} style={{ background: 'var(--paper)', color: 'var(--ink)' }}>◂ BACK</button>
+      </div>
+
+      <div className="scroll" style={{ padding: '18px 20px', display: 'grid', gap: 20, alignContent: 'start' }}>
+        {/* Health */}
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>7-day health</div>
+          <HealthBar value={health} />
+        </div>
+
+        {/* Mini calendar — last 7 days */}
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 8 }}>this week</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+            {last7.map(day => {
+              const count = byDay[day] || 0
+              const alpha = count === 0 ? 0 : Math.min(0.3 + count * 0.15, 1)
+              return (
+                <div key={day} style={{ textAlign: 'center' }}>
+                  <div style={{
+                    height: 32, border: '2px solid var(--ink)',
+                    background: count > 0 ? `oklch(0.52 0.24 18 / ${alpha})` : 'var(--paper)',
+                  }} />
+                  <div className="mono" style={{ fontSize: 7, opacity: 0.5, marginTop: 3 }}>
+                    {new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Entry list */}
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>recent entries</div>
+          {loading ? (
+            <div className="mono" style={{ fontSize: 11, opacity: 0.4 }}>loading...</div>
+          ) : entries.length === 0 ? (
+            <div className="hand" style={{ fontSize: 17, opacity: 0.4 }}>no entries yet.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {entries.map((e, i) => {
+                const b = BURNERS.find(x => x.id === e.burnerId)
+                return <EntryCard key={e.id} entry={e} burner={b} onRemove={null} index={i} />
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
