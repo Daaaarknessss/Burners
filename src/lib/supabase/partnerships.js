@@ -12,19 +12,21 @@ export async function getPartnerships(supabase) {
   return data
 }
 
-// Send a partnership request by email
-export async function requestPartnership(supabase, email) {
-  const rows = await supabase.rpc('find_profile_by_email', { search_email: email })
-  if (rows.error) throw rows.error
-  const target = rows.data?.[0]
-  if (!target) throw new Error('No account found with that email.')
+// Search users by display_name or email prefix (min 2 chars)
+export async function searchProfiles(supabase, query) {
+  const { data, error } = await supabase.rpc('search_profiles', { query: query.trim() })
+  if (error) throw error
+  return data ?? []
+}
 
+// Send a partnership request by user ID
+export async function requestPartnership(supabase, targetUserId) {
   const { data: { user } } = await supabase.auth.getUser()
-  if (target.id === user.id) throw new Error("You can't add yourself.")
+  if (targetUserId === user.id) throw new Error("You can't add yourself.")
 
   const { data, error } = await supabase
     .from('partnerships')
-    .insert({ requester_id: user.id, partner_id: target.id })
+    .insert({ requester_id: user.id, partner_id: targetUserId })
     .select()
     .single()
   if (error) {

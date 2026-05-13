@@ -4,7 +4,7 @@ import { useIsMobile } from './hooks'
 import { getSupabase } from './lib/supabase/client'
 import { getEntries, addEntry as dbAddEntry, deleteEntry as dbDeleteEntry } from './lib/supabase/entries'
 import { getStreak } from './lib/supabase/streak'
-import { getPartnerships, requestPartnership, respondToPartnership, removePartnership, getPartnerHealth } from './lib/supabase/partnerships'
+import { getPartnerships, searchProfiles, requestPartnership, respondToPartnership, removePartnership, getPartnerHealth } from './lib/supabase/partnerships'
 
 function normaliseEntry(row) {
   return {
@@ -589,10 +589,14 @@ function PartnerCard({ partnership, userId }) {
 function BondsPanel({ userId, isMobile }) {
   const [partnerships, setPartnerships] = useState([])
   const [loading, setLoading] = useState(true)
-  const [email, setEmail] = useState('')
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [searching, setSearching] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState(null)
   const [sendOk, setSendOk] = useState(false)
+  const searchTimeout = useRef(null)
   const supabase = getSupabase()
 
   const reload = () => {
@@ -607,14 +611,40 @@ function BondsPanel({ userId, isMobile }) {
   const outgoing = partnerships.filter(p => p.requester_id === userId && p.status === 'pending')
   const isUnlocked = partnerships.some(p => p.partner_id === userId && p.status === 'active')
 
+  const handleQueryChange = (e) => {
+    const val = e.target.value
+    setQuery(val)
+    setSelected(null)
+    setSendError(null)
+    setSendOk(false)
+    clearTimeout(searchTimeout.current)
+    if (val.trim().length < 2) { setResults([]); return }
+    setSearching(true)
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const r = await searchProfiles(supabase, val.trim())
+        setResults(r.filter(u => u.id !== userId))
+      } catch {}
+      setSearching(false)
+    }, 300)
+  }
+
+  const selectUser = (user) => {
+    setSelected(user)
+    setQuery(user.display_name || user.email)
+    setResults([])
+  }
+
   const sendRequest = async (e) => {
     e.preventDefault()
+    if (!selected) return
     setSendError(null)
     setSendOk(false)
     setSending(true)
     try {
-      await requestPartnership(supabase, email.trim())
-      setEmail('')
+      await requestPartnership(supabase, selected.id)
+      setQuery('')
+      setSelected(null)
       setSendOk(true)
       reload()
     } catch (err) {
@@ -722,17 +752,60 @@ function BondsPanel({ userId, isMobile }) {
         <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>add by email</div>
             <form onSubmit={sendRequest} style={{ display: 'grid', gap: 8 }}>
-              <input
-                className="ink-input"
-                type="email"
-                placeholder="their@email.com"
-                value={email}
-                onChange={e => { setEmail(e.target.value); setSendError(null); setSendOk(false) }}
-                required
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="ink-input"
+                  type="text"
+                  placeholder="search by name or email..."
+                  value={query}
+                  onChange={handleQueryChange}
+                  autoComplete="off"
+                />
+                {(results.length > 0 || searching) && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                    background: 'var(--paper-2)', border: '2px solid var(--ink)',
+                    borderTop: 'none', maxHeight: 220, overflowY: 'auto'
+                  }}>
+                    {searching && (
+                      <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>searching...</div>
+                    )}
+                    {results.map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => selectUser(u)}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '10px 14px',
+                          background: 'none', border: 'none', borderBottom: '1px solid var(--ink)',
+                          cursor: 'pointer', display: 'grid', gap: 2
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--paper-3)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        <div className="display" style={{ fontSize: 16, color: 'var(--ink)' }}>{u.display_name}</div>
+                        {u.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {u.shikai_name}</div>}
+                        <div className="mono" style={{ fontSize: 9, opacity: 0.4 }}>{u.email}</div>
+                      </button>
+                    ))}
+                    {!searching && results.length === 0 && query.length >= 2 && (
+                      <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>no users found.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {selected && (
+                <div style={{ padding: '8px 12px', background: 'var(--paper-3)', border: '2px solid var(--red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div className="display" style={{ fontSize: 15 }}>{selected.display_name}</div>
+                    {selected.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {selected.shikai_name}</div>}
+                  </div>
+                  <div className="mono" style={{ fontSize: 9, color: 'var(--red)' }}>selected ✓</div>
+                </div>
+              )}
               {sendError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)', letterSpacing: '0.08em' }}>{sendError}</div>}
               {sendOk && <div className="mono" style={{ fontSize: 10, opacity: 0.6, letterSpacing: '0.08em' }}>request sent.</div>}
-              <button type="submit" className="btn red sm" disabled={sending} style={{ justifySelf: 'start' }}>
+              <button type="submit" className="btn red sm" disabled={sending || !selected} style={{ justifySelf: 'start' }}>
                 {sending ? '...' : 'SEND REQUEST ▸'}
               </button>
             </form>
