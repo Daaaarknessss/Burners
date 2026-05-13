@@ -569,7 +569,9 @@ function PartnerCard({ partnership, userId }) {
     <div className="panel-sm" style={{ padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div className="display" style={{ fontSize: 22 }}>@{profile?.username || '???'}</div>
+          <div className="display" style={{ fontSize: 22 }}>
+            {profile?.username ? `@${profile.username}` : <span style={{ opacity: 0.4, fontSize: 14 }}>handle not set yet</span>}
+          </div>
           {profile?.shikai_name && (
             <div className="eyebrow" style={{ opacity: 0.55, marginTop: 2 }}>season // {profile.shikai_name}</div>
           )}
@@ -715,7 +717,7 @@ function BondsPanel({ userId, username, isMobile }) {
                 return (
                   <div key={p.id} className="panel-sm" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
-                      <div className="display" style={{ fontSize: 18 }}>@{from?.username || '???'}</div>
+                      <div className="display" style={{ fontSize: 18 }}>{from?.username ? `@${from.username}` : '(no handle)'}</div>
                       {from?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {from.shikai_name}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -737,7 +739,7 @@ function BondsPanel({ userId, username, isMobile }) {
               {outgoing.map(p => (
                 <div key={p.id} className="panel-sm" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                   <div>
-                    <div className="display" style={{ fontSize: 15 }}>@{p.partner?.username || '???'}</div>
+                    <div className="display" style={{ fontSize: 15 }}>{p.partner?.username ? `@${p.partner.username}` : '(no handle)'}</div>
                     {p.partner?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {p.partner.shikai_name}</div>}
                   </div>
                   <button className="btn ghost sm" onClick={async () => { await removePartnership(supabase, p.id).catch(() => {}); reload() }} style={{ fontSize: 10, padding: '4px 8px', opacity: 0.6 }}>cancel</button>
