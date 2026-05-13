@@ -4,8 +4,8 @@ export async function getPartnerships(supabase) {
     .from('partnerships')
     .select(`
       *,
-      requester:profiles!partnerships_requester_profile_fkey(id, display_name, shikai_name),
-      partner:profiles!partnerships_partner_profile_fkey(id, display_name, shikai_name)
+      requester:profiles!partnerships_requester_profile_fkey(id, username, shikai_name),
+      partner:profiles!partnerships_partner_profile_fkey(id, username, shikai_name)
     `)
     .order('created_at', { ascending: false })
   if (error) throw error

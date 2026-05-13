@@ -569,7 +569,7 @@ function PartnerCard({ partnership, userId }) {
     <div className="panel-sm" style={{ padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div className="display" style={{ fontSize: 22 }}>{profile?.display_name || 'partner'}</div>
+          <div className="display" style={{ fontSize: 22 }}>@{profile?.username || '???'}</div>
           {profile?.shikai_name && (
             <div className="eyebrow" style={{ opacity: 0.55, marginTop: 2 }}>season // {profile.shikai_name}</div>
           )}
@@ -587,28 +587,56 @@ function PartnerCard({ partnership, userId }) {
 }
 
 function BondsPanel({ userId, isMobile }) {
+  const [myUsername, setMyUsername]     = useState(undefined) // undefined = loading
+  const [usernameInput, setUsernameInput] = useState('')
+  const [usernameError, setUsernameError] = useState(null)
+  const [savingUsername, setSavingUsername] = useState(false)
+
   const [partnerships, setPartnerships] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [searching, setSearching] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState(null)
-  const [sendOk, setSendOk] = useState(false)
-  const searchTimeout = useRef(null)
-  const supabase = getSupabase()
+  const [loading, setLoading]           = useState(true)
+  const [query, setQuery]               = useState('')
+  const [results, setResults]           = useState([])
+  const [selected, setSelected]         = useState(null)
+  const [searching, setSearching]       = useState(false)
+  const [sending, setSending]           = useState(false)
+  const [sendError, setSendError]       = useState(null)
+  const [sendOk, setSendOk]             = useState(false)
+  const searchTimeout                   = useRef(null)
+  const supabase                        = getSupabase()
 
   const reload = () => {
     setLoading(true)
     getPartnerships(supabase).then(setPartnerships).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [])
+  useEffect(() => {
+    supabase.from('profiles').select('username').eq('id', userId).single()
+      .then(({ data }) => setMyUsername(data?.username ?? null))
+      .catch(() => setMyUsername(null))
+    reload()
+  }, [])
 
-  const active   = partnerships.filter(p => p.status === 'active')
-  const incoming = partnerships.filter(p => p.partner_id === userId && p.status === 'pending')
-  const outgoing = partnerships.filter(p => p.requester_id === userId && p.status === 'pending')
+  const saveUsername = async (e) => {
+    e.preventDefault()
+    const val = usernameInput.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,20}$/.test(val)) {
+      setUsernameError('3–20 chars, letters / numbers / underscore only')
+      return
+    }
+    setSavingUsername(true)
+    setUsernameError(null)
+    const { error } = await supabase.from('profiles').update({ username: val }).eq('id', userId)
+    if (error) {
+      setUsernameError(error.code === '23505' ? 'Username already taken.' : error.message)
+    } else {
+      setMyUsername(val)
+    }
+    setSavingUsername(false)
+  }
+
+  const active     = partnerships.filter(p => p.status === 'active')
+  const incoming   = partnerships.filter(p => p.partner_id === userId && p.status === 'pending')
+  const outgoing   = partnerships.filter(p => p.requester_id === userId && p.status === 'pending')
   const isUnlocked = partnerships.some(p => p.partner_id === userId && p.status === 'active')
 
   const handleQueryChange = (e) => {
@@ -623,7 +651,7 @@ function BondsPanel({ userId, isMobile }) {
     searchTimeout.current = setTimeout(async () => {
       try {
         const r = await searchProfiles(supabase, val.trim())
-        setResults(r.filter(u => u.id !== userId))
+        setResults(r)
       } catch {}
       setSearching(false)
     }, 300)
@@ -631,7 +659,7 @@ function BondsPanel({ userId, isMobile }) {
 
   const selectUser = (user) => {
     setSelected(user)
-    setQuery(user.display_name || user.email)
+    setQuery('@' + user.username)
     setResults([])
   }
 
@@ -659,7 +687,8 @@ function BondsPanel({ userId, isMobile }) {
     reload()
   }
 
-  if (loading) {
+  // ── Loading ──
+  if (myUsername === undefined || loading) {
     return (
       <div className="panel reveal" style={{ padding: 28, display: 'grid', placeItems: 'center', minHeight: 200 }}>
         <div className="mono" style={{ opacity: 0.4, fontSize: 12, letterSpacing: '0.1em' }}>loading bonds...</div>
@@ -667,28 +696,66 @@ function BondsPanel({ userId, isMobile }) {
     )
   }
 
+  // ── Username setup gate ──
+  if (myUsername === null) {
+    return (
+      <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }}>
+          <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
+          <div className="display" style={{ fontSize: 30 }}>BONDS</div>
+        </div>
+        <div style={{ padding: 28, display: 'grid', gap: 18, alignContent: 'start' }}>
+          <div>
+            <div className="display" style={{ fontSize: 22 }}>CHOOSE YOUR HANDLE</div>
+            <div className="hand" style={{ fontSize: 16, marginTop: 6, opacity: 0.65, lineHeight: 1.4 }}>
+              This is how other users find and recognise you.<br />
+              Pick something short and yours.
+            </div>
+          </div>
+          <form onSubmit={saveUsername} style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+              <div className="mono" style={{ fontSize: 18, padding: '8px 10px', background: 'var(--ink)', color: 'var(--paper)', lineHeight: 1 }}>@</div>
+              <input
+                className="ink-input"
+                type="text"
+                placeholder="yourhandle"
+                value={usernameInput}
+                onChange={e => { setUsernameInput(e.target.value); setUsernameError(null) }}
+                maxLength={20}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+            </div>
+            {usernameError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)' }}>{usernameError}</div>}
+            <button type="submit" className="btn red sm" disabled={savingUsername || usernameInput.trim().length < 3} style={{ justifySelf: 'start' }}>
+              {savingUsername ? '...' : 'SET HANDLE ▸'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main bonds UI ──
   return (
     <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
-      {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }}>
-        <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
-        <div className="display" style={{ fontSize: 30 }}>BONDS</div>
+      <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
+          <div className="display" style={{ fontSize: 30 }}>BONDS</div>
+        </div>
+        <div className="mono" style={{ fontSize: 11, opacity: 0.6, paddingBottom: 4 }}>@{myUsername}</div>
       </div>
 
       <div className="scroll" style={{ padding: 20, display: 'grid', gap: 24, alignContent: 'start' }}>
 
-        {/* ── Locked state ── */}
+        {/* ── Locked notice ── */}
         {!isUnlocked && (
-          <div style={{ padding: '20px 0', borderBottom: '3px solid var(--ink)' }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div className="display" style={{ fontSize: 48, color: 'var(--red)', lineHeight: 1 }}>○</div>
-              <div>
-                <div className="display" style={{ fontSize: 20 }}>LOCKED</div>
-                <div className="hand" style={{ fontSize: 17, marginTop: 4, opacity: 0.7, lineHeight: 1.3 }}>
-                  Accept someone's bond request to unlock.<br />
-                  You must be watched before you can watch.
-                </div>
-              </div>
+          <div style={{ padding: '16px 18px', border: '2px solid var(--ink)', background: 'var(--paper-2)' }}>
+            <div className="display" style={{ fontSize: 15, marginBottom: 4 }}>○ LOCKED</div>
+            <div className="hand" style={{ fontSize: 15, opacity: 0.65, lineHeight: 1.4 }}>
+              Accept someone's request to unlock watching others.<br />
+              You must be watched before you can watch.
             </div>
           </div>
         )}
@@ -702,16 +769,15 @@ function BondsPanel({ userId, isMobile }) {
             </div>
           </div>
         )}
-
         {isUnlocked && active.length === 0 && (
-          <div className="hand" style={{ opacity: 0.5, fontSize: 18 }}>no active bonds yet. invite someone below.</div>
+          <div className="hand" style={{ opacity: 0.5, fontSize: 16 }}>no active bonds yet.</div>
         )}
 
         {/* ── Incoming requests ── */}
         {incoming.length > 0 && (
           <div>
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>
-              incoming requests <span style={{ color: 'var(--red)' }}>· {incoming.length}</span>
+              incoming <span style={{ color: 'var(--red)' }}>· {incoming.length}</span>
             </div>
             <div style={{ display: 'grid', gap: 8 }}>
               {incoming.map(p => {
@@ -719,8 +785,8 @@ function BondsPanel({ userId, isMobile }) {
                 return (
                   <div key={p.id} className="panel-sm" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
-                      <div className="display" style={{ fontSize: 18 }}>{from?.display_name || 'someone'}</div>
-                      {from?.shikai_name && <div className="mono" style={{ fontSize: 10, opacity: 0.5 }}>season // {from.shikai_name}</div>}
+                      <div className="display" style={{ fontSize: 18 }}>@{from?.username || '???'}</div>
+                      {from?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {from.shikai_name}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button className="btn red sm" onClick={() => respond(p.id, 'active')} style={{ fontSize: 12 }}>ACCEPT</button>
@@ -739,77 +805,79 @@ function BondsPanel({ userId, isMobile }) {
             <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>waiting on reply</div>
             <div style={{ display: 'grid', gap: 8 }}>
               {outgoing.map(p => (
-                <div key={p.id} className="panel-sm" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, opacity: 0.7 }}>
-                  <div className="mono" style={{ fontSize: 11 }}>{p.partner?.display_name || 'pending...'}</div>
-                  <button className="btn ghost sm" onClick={async () => { await removePartnership(supabase, p.id).catch(() => {}); reload() }} style={{ fontSize: 10, padding: '4px 8px' }}>cancel</button>
+                <div key={p.id} className="panel-sm" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <div>
+                    <div className="display" style={{ fontSize: 15 }}>@{p.partner?.username || '???'}</div>
+                    {p.partner?.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {p.partner.shikai_name}</div>}
+                  </div>
+                  <button className="btn ghost sm" onClick={async () => { await removePartnership(supabase, p.id).catch(() => {}); reload() }} style={{ fontSize: 10, padding: '4px 8px', opacity: 0.6 }}>cancel</button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── Add partner ── always visible so users can initiate the first request ── */}
+        {/* ── Add partner ── */}
         <div>
-            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>add by email</div>
-            <form onSubmit={sendRequest} style={{ display: 'grid', gap: 8 }}>
-              <div style={{ position: 'relative' }}>
-                <input
-                  className="ink-input"
-                  type="text"
-                  placeholder="search by name or email..."
-                  value={query}
-                  onChange={handleQueryChange}
-                  autoComplete="off"
-                />
-                {(results.length > 0 || searching) && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                    background: 'var(--paper-2)', border: '2px solid var(--ink)',
-                    borderTop: 'none', maxHeight: 220, overflowY: 'auto'
-                  }}>
-                    {searching && (
-                      <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>searching...</div>
-                    )}
-                    {results.map(u => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => selectUser(u)}
-                        style={{
-                          width: '100%', textAlign: 'left', padding: '10px 14px',
-                          background: 'none', border: 'none', borderBottom: '1px solid var(--ink)',
-                          cursor: 'pointer', display: 'grid', gap: 2
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--paper-3)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                      >
-                        <div className="display" style={{ fontSize: 16, color: 'var(--ink)' }}>{u.display_name}</div>
-                        {u.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {u.shikai_name}</div>}
-                        <div className="mono" style={{ fontSize: 9, opacity: 0.4 }}>{u.email}</div>
-                      </button>
-                    ))}
-                    {!searching && results.length === 0 && query.length >= 2 && (
-                      <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>no users found.</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {selected && (
-                <div style={{ padding: '8px 12px', background: 'var(--paper-3)', border: '2px solid var(--red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div className="display" style={{ fontSize: 15 }}>{selected.display_name}</div>
-                    {selected.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {selected.shikai_name}</div>}
-                  </div>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--red)' }}>selected ✓</div>
+          <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>find by username</div>
+          <form onSubmit={sendRequest} style={{ display: 'grid', gap: 8 }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="ink-input"
+                type="text"
+                placeholder="@username..."
+                value={query}
+                onChange={handleQueryChange}
+                autoComplete="off"
+              />
+              {(results.length > 0 || (searching && query.length >= 2)) && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                  background: 'var(--paper-2)', border: '2px solid var(--ink)', borderTop: 'none',
+                  maxHeight: 220, overflowY: 'auto'
+                }}>
+                  {searching && (
+                    <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>searching...</div>
+                  )}
+                  {results.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => selectUser(u)}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '10px 14px',
+                        background: 'none', border: 'none', borderBottom: '1px solid var(--ink)',
+                        cursor: 'pointer', display: 'grid', gap: 2
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--paper-3)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <div className="display" style={{ fontSize: 16, color: 'var(--ink)' }}>@{u.username}</div>
+                      {u.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {u.shikai_name}</div>}
+                    </button>
+                  ))}
+                  {!searching && results.length === 0 && query.length >= 2 && (
+                    <div className="mono" style={{ padding: '10px 14px', fontSize: 10, opacity: 0.4 }}>no users found.</div>
+                  )}
                 </div>
               )}
-              {sendError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)', letterSpacing: '0.08em' }}>{sendError}</div>}
-              {sendOk && <div className="mono" style={{ fontSize: 10, opacity: 0.6, letterSpacing: '0.08em' }}>request sent.</div>}
-              <button type="submit" className="btn red sm" disabled={sending || !selected} style={{ justifySelf: 'start' }}>
-                {sending ? '...' : 'SEND REQUEST ▸'}
-              </button>
-            </form>
-          </div>
+            </div>
+            {selected && (
+              <div style={{ padding: '8px 12px', background: 'var(--paper-3)', border: '2px solid var(--red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div className="display" style={{ fontSize: 15 }}>@{selected.username}</div>
+                  {selected.shikai_name && <div className="mono" style={{ fontSize: 9, opacity: 0.5 }}>season // {selected.shikai_name}</div>}
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--red)' }}>selected ✓</div>
+              </div>
+            )}
+            {sendError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)' }}>{sendError}</div>}
+            {sendOk && <div className="mono" style={{ fontSize: 10, opacity: 0.6 }}>request sent.</div>}
+            <button type="submit" className="btn red sm" disabled={sending || !selected} style={{ justifySelf: 'start' }}>
+              {sending ? '...' : 'SEND REQUEST ▸'}
+            </button>
+          </form>
+        </div>
 
       </div>
     </div>
