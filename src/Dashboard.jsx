@@ -38,6 +38,7 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
   const [entries, setEntries] = useState([])
   const [streak, setStreak] = useState(1)
   const [mobileTab, setMobileTab] = useState('log')
+  const [selectedDay, setSelectedDay] = useState(todayKey())
   const supabase = getSupabase()
 
   useEffect(() => {
@@ -60,15 +61,21 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
     } catch {}
   }
 
-  const todays = entries.filter(e => e.day === todayKey())
+  const isToday = selectedDay === todayKey()
+  const selectedEntries = entries.filter(e => e.day === selectedDay)
   const chosenBurners = BURNERS.filter(b => chosen.includes(b.id))
+
+  const handleDaySelect = (day) => {
+    setSelectedDay(day)
+    if (isMobile) setMobileTab('log')
+  }
 
   return (
     <div
       className="dash-root paper-grain"
       style={{ height: '100%', position: 'relative', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 18, padding: '22px 28px 18px' }}
     >
-      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} entryCount={todays.length} isMobile={isMobile} shikaiName={shikaiName} />
+      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} entryCount={selectedEntries.length} isMobile={isMobile} shikaiName={shikaiName} isToday={isToday} />
 
       {isMobile ? (
         <>
@@ -78,7 +85,7 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
               onClick={() => setMobileTab('log')}
             >
               THE LOG
-              {todays.length > 0 && <span className="mobile-tab-count">{todays.length}</span>}
+              {selectedEntries.length > 0 && <span className="mobile-tab-count">{selectedEntries.length}</span>}
             </button>
             <button
               className={`mobile-tab ${mobileTab === 'add' ? 'active' : ''}`}
@@ -89,26 +96,26 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
           </div>
           <div className="dash-tab-panel">
             {mobileTab === 'log'
-              ? <EntryList entries={todays} onRemove={removeEntry} />
-              : <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setMobileTab('log')} isMobile={isMobile} />
+              ? <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
+              : <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => { setMobileTab('log'); setSelectedDay(todayKey()) }} isMobile={isMobile} />
             }
           </div>
         </>
       ) : (
         <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
-          <EntryList entries={todays} onRemove={removeEntry} />
-          <Composer chosenBurners={chosenBurners} onAdd={addEntry} isMobile={isMobile} />
+          <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
+          <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setSelectedDay(todayKey())} isMobile={isMobile} />
         </div>
       )}
 
-      <WeekStrip entries={entries} chosenBurners={chosenBurners} isMobile={isMobile} />
+      <WeekStrip entries={entries} chosenBurners={chosenBurners} isMobile={isMobile} selectedDay={selectedDay} onDaySelect={handleDaySelect} />
     </div>
   )
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
 
-function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shikaiName }) {
+function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shikaiName, isToday }) {
   const dateStr = fmtDate(new Date()).toUpperCase()
   return (
     <div className="dash-header reveal" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 18, alignItems: 'end' }}>
@@ -127,7 +134,9 @@ function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shik
           <div className="mono" style={{ fontSize: 12, opacity: 0.6 }}>{dateStr}</div>
         </div>
         <div className="hand" style={{ fontSize: isMobile ? 18 : 22, marginTop: 6, opacity: 0.75 }}>
-          {entryCount === 0 ? 'log your first move of the day.' : `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} burning so far.`}
+          {entryCount === 0
+            ? (isToday ? 'log your first move of the day.' : 'nothing logged this day.')
+            : `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} ${isToday ? 'burning so far.' : 'that day.'}`}
         </div>
       </div>
 
@@ -153,18 +162,22 @@ function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shik
 
 // ── Entry list ───────────────────────────────────────────────────────────────
 
-function EntryList({ entries, onRemove }) {
+function EntryList({ entries, onRemove, selectedDay, isToday }) {
+  const dayLabel = isToday
+    ? '// today'
+    : `// ${new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}`
+
   return (
     <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
       <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)' }}>
         <div>
-          <div className="eyebrow" style={{ opacity: 0.6 }}>// today</div>
+          <div className="eyebrow" style={{ opacity: 0.6 }}>{dayLabel}</div>
           <div className="display" style={{ fontSize: 30 }}>the log</div>
         </div>
         <SFX rotate={-6} size={28} style={{ position: 'static' }} color="var(--red)">{entries.length > 0 ? 'BOOM!' : '...'}</SFX>
       </div>
       <div className="scroll" style={{ padding: 18 }}>
-        {entries.length === 0 ? <EmptyState /> : (
+        {entries.length === 0 ? <EmptyState isToday={isToday} /> : (
           <div style={{ display: 'grid', gap: 14 }}>
             {entries.map((e, i) => {
               const b = BURNERS.find(x => x.id === e.burnerId)
@@ -177,13 +190,13 @@ function EntryList({ entries, onRemove }) {
   )
 }
 
-function EmptyState() {
+function EmptyState({ isToday }) {
   return (
     <div style={{ display: 'grid', placeItems: 'center', padding: '30px 10px', textAlign: 'center', position: 'relative' }}>
       <div style={{ transform: 'scale(0.85)' }}><BurnerArt ignited={false} size={140} /></div>
       <div className="display" style={{ fontSize: 36, marginTop: 14 }}>cold stove.</div>
       <div className="hand" style={{ fontSize: 20, opacity: 0.7, maxWidth: 340 }}>
-        nothing logged yet. throw a log on the fire →
+        {isToday ? 'nothing logged yet. throw a log on the fire →' : 'nothing was logged this day.'}
       </div>
       <SFX rotate={-12} size={40} top={20} right={40} color="var(--red)">silence...</SFX>
     </div>
@@ -515,7 +528,7 @@ function Composer({ chosenBurners, onAdd, onSubmitSuccess, isMobile }) {
 
 // ── Week strip ───────────────────────────────────────────────────────────────
 
-function WeekStrip({ entries, chosenBurners, isMobile }) {
+function WeekStrip({ entries, chosenBurners, isMobile, selectedDay, onDaySelect }) {
   const days = useMemo(() => {
     const today = new Date()
     return Array.from({ length: 7 }, (_, i) => {
@@ -546,14 +559,24 @@ function WeekStrip({ entries, chosenBurners, isMobile }) {
               const k = d.toISOString().slice(0, 10)
               const heat = cellHeat(k, b.id)
               const alpha = heat === 0 ? 0 : 0.25 + (heat / 12) * 0.75
+              const selected = k === selectedDay
               return (
-                <div key={k} style={{
-                  border: '2px solid var(--ink)', height: 30,
-                  background: heat === 0 ? 'var(--paper)' : `oklch(0.52 0.24 18 / ${alpha})`,
-                  display: 'grid', placeItems: 'center',
-                }}>
-                  <div className="mono" style={{ fontSize: 8, opacity: 0.7, color: 'var(--ink)' }}>{dayLabel(d, idx)}</div>
-                </div>
+                <button
+                  key={k}
+                  onClick={() => onDaySelect(k)}
+                  style={{
+                    all: 'unset',
+                    cursor: 'pointer',
+                    border: selected ? '2px solid var(--red)' : '2px solid var(--ink)',
+                    boxShadow: selected ? 'inset 0 0 0 1px var(--red)' : 'none',
+                    height: 30,
+                    background: heat === 0 ? 'var(--paper)' : `oklch(0.52 0.24 18 / ${alpha})`,
+                    display: 'grid', placeItems: 'center',
+                    transition: 'border-color 150ms',
+                  }}
+                >
+                  <div className="mono" style={{ fontSize: 8, opacity: selected ? 1 : 0.7, color: selected ? 'var(--red)' : 'var(--ink)', fontWeight: selected ? 700 : 400 }}>{dayLabel(d, idx)}</div>
+                </button>
               )
             })}
           </div>
