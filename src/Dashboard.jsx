@@ -4,6 +4,7 @@ import { useIsMobile } from './hooks'
 import { getSupabase } from './lib/supabase/client'
 import { getEntries, addEntry as dbAddEntry, deleteEntry as dbDeleteEntry } from './lib/supabase/entries'
 import { getStreak } from './lib/supabase/streak'
+import { getPartnerships, requestPartnership, respondToPartnership, removePartnership, getPartnerHealth } from './lib/supabase/partnerships'
 
 function normaliseEntry(row) {
   return {
@@ -33,12 +34,13 @@ const CONTEXT_TAGS = ['FOCUSED', 'TIRED', 'INSPIRED', 'TOUGH', 'PROUD', 'SOLO', 
 
 const INTENSITY_LABELS = { 1: 'LIGHT', 2: 'LOW', 3: 'MED', 4: 'HIGH', 5: 'MAX' }
 
-export default function Dashboard({ chosen, shikaiName, onReset }) {
+export default function Dashboard({ chosen, shikaiName, onReset, onLogout, userId }) {
   const isMobile = useIsMobile()
   const [entries, setEntries] = useState([])
   const [streak, setStreak] = useState(1)
   const [mobileTab, setMobileTab] = useState('log')
   const [selectedDay, setSelectedDay] = useState(todayKey())
+  const [view, setView] = useState('home')
   const supabase = getSupabase()
 
   useEffect(() => {
@@ -75,37 +77,35 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
       className="dash-root paper-grain"
       style={{ height: '100%', position: 'relative', display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 18, padding: '22px 28px 18px' }}
     >
-      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} entryCount={selectedEntries.length} isMobile={isMobile} shikaiName={shikaiName} isToday={isToday} />
+      <DashHeader chosenBurners={chosenBurners} streak={streak} onReset={onReset} onLogout={onLogout} entryCount={selectedEntries.length} isMobile={isMobile} shikaiName={shikaiName} isToday={isToday} bondsActive={view === 'bonds'} onBondsClick={() => setView(v => v === 'bonds' ? 'home' : 'bonds')} />
 
       {isMobile ? (
         <>
-          <div className="mobile-tabs">
-            <button
-              className={`mobile-tab ${mobileTab === 'log' ? 'active' : ''}`}
-              onClick={() => setMobileTab('log')}
-            >
+          <div className="mobile-tabs" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <button className={`mobile-tab ${mobileTab === 'log' ? 'active' : ''}`} onClick={() => setMobileTab('log')}>
               THE LOG
               {selectedEntries.length > 0 && <span className="mobile-tab-count">{selectedEntries.length}</span>}
             </button>
-            <button
-              className={`mobile-tab ${mobileTab === 'add' ? 'active' : ''}`}
-              onClick={() => setMobileTab('add')}
-            >
+            <button className={`mobile-tab ${mobileTab === 'add' ? 'active' : ''}`} onClick={() => setMobileTab('add')}>
               ADD ENTRY
+            </button>
+            <button className={`mobile-tab ${mobileTab === 'bonds' ? 'active' : ''}`} onClick={() => setMobileTab('bonds')} style={{ borderRight: 'none' }}>
+              BONDS
             </button>
           </div>
           <div className="dash-tab-panel">
-            {mobileTab === 'log'
-              ? <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
-              : <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => { setMobileTab('log'); setSelectedDay(todayKey()) }} isMobile={isMobile} />
-            }
+            {mobileTab === 'log' && <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />}
+            {mobileTab === 'add' && <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => { setMobileTab('log'); setSelectedDay(todayKey()) }} isMobile={isMobile} />}
+            {mobileTab === 'bonds' && <BondsPanel userId={userId} isMobile={isMobile} />}
           </div>
         </>
       ) : (
-        <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
-          <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
-          <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setSelectedDay(todayKey())} isMobile={isMobile} />
-        </div>
+        view === 'bonds'
+          ? <BondsPanel userId={userId} isMobile={isMobile} />
+          : <div className="dash-body" style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 22, minHeight: 0 }}>
+              <EntryList entries={selectedEntries} onRemove={removeEntry} selectedDay={selectedDay} isToday={isToday} />
+              <Composer chosenBurners={chosenBurners} onAdd={addEntry} onSubmitSuccess={() => setSelectedDay(todayKey())} isMobile={isMobile} />
+            </div>
       )}
 
       <WeekStrip entries={entries} chosenBurners={chosenBurners} isMobile={isMobile} selectedDay={selectedDay} onDaySelect={handleDaySelect} />
@@ -115,7 +115,7 @@ export default function Dashboard({ chosen, shikaiName, onReset }) {
 
 // ── Header ──────────────────────────────────────────────────────────────────
 
-function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shikaiName, isToday }) {
+function DashHeader({ chosenBurners, streak, onReset, onLogout, entryCount, isMobile, shikaiName, isToday, bondsActive, onBondsClick }) {
   const dateStr = fmtDate(new Date()).toUpperCase()
   return (
     <div className="dash-header reveal" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 18, alignItems: 'end' }}>
@@ -152,8 +152,16 @@ function DashHeader({ chosenBurners, streak, onReset, entryCount, isMobile, shik
             ))}
           </div>
         </div>
+        {!isMobile && (
+          <button className="btn ghost sm" onClick={onBondsClick} style={bondsActive ? { background: 'var(--ink)', color: 'var(--paper)' } : {}}>
+            {bondsActive ? '◂ BACK' : 'BONDS'}
+          </button>
+        )}
         <button className="btn ghost sm" onClick={onReset} title="Pick new burners">
-          {isMobile ? '↻' : '↻ reset season'}
+          {isMobile ? '↻' : '↻ reset'}
+        </button>
+        <button className="btn ghost sm" onClick={onLogout} style={{ opacity: 0.7 }} title="Sign out">
+          {isMobile ? '↩' : '↩ out'}
         </button>
       </div>
     </div>
@@ -521,6 +529,217 @@ function Composer({ chosenBurners, onAdd, onSubmitSuccess, isMobile }) {
         >
           LOG IT ▸
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Bonds ────────────────────────────────────────────────────────────────────
+
+function HealthBar({ value }) {
+  if (value === null) return <div className="mono" style={{ fontSize: 10, opacity: 0.4, marginTop: 8 }}>calculating...</div>
+  const segments = 10
+  const filled = Math.round((value / 100) * segments)
+  const color = value > 60 ? 'var(--red)' : value > 30 ? 'oklch(0.55 0.28 45)' : 'oklch(0.38 0.22 18)'
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 3 }}>
+        {Array.from({ length: segments }).map((_, i) => (
+          <div key={i} style={{ flex: 1, height: 12, border: '2px solid var(--ink)', background: i < filled ? color : 'transparent' }} />
+        ))}
+      </div>
+      <div className="mono" style={{ fontSize: 9, opacity: 0.55, marginTop: 4, letterSpacing: '0.1em' }}>
+        HP {value}/100 · 7-day activity
+      </div>
+    </div>
+  )
+}
+
+function PartnerCard({ partnership, userId }) {
+  const [health, setHealth] = useState(null)
+  const supabase = getSupabase()
+  const partnerId = partnership.requester_id === userId ? partnership.partner_id : partnership.requester_id
+  const profile   = partnership.requester_id === userId ? partnership.partner  : partnership.requester
+
+  useEffect(() => {
+    getPartnerHealth(supabase, partnerId).then(setHealth).catch(() => setHealth(0))
+  }, [partnerId])
+
+  return (
+    <div className="panel-sm" style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div className="display" style={{ fontSize: 22 }}>{profile?.display_name || 'partner'}</div>
+          {profile?.shikai_name && (
+            <div className="eyebrow" style={{ opacity: 0.55, marginTop: 2 }}>season // {profile.shikai_name}</div>
+          )}
+        </div>
+        <button
+          className="btn ghost sm"
+          onClick={async () => { await removePartnership(supabase, partnership.id).catch(() => {}) ; window.location.reload() }}
+          style={{ fontSize: 10, padding: '4px 8px', opacity: 0.5 }}
+          title="Remove bond"
+        >✕</button>
+      </div>
+      <HealthBar value={health} />
+    </div>
+  )
+}
+
+function BondsPanel({ userId, isMobile }) {
+  const [partnerships, setPartnerships] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [email, setEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState(null)
+  const [sendOk, setSendOk] = useState(false)
+  const supabase = getSupabase()
+
+  const reload = () => {
+    setLoading(true)
+    getPartnerships(supabase).then(setPartnerships).catch(() => {}).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  const active   = partnerships.filter(p => p.status === 'active')
+  const incoming = partnerships.filter(p => p.partner_id === userId && p.status === 'pending')
+  const outgoing = partnerships.filter(p => p.requester_id === userId && p.status === 'pending')
+  const isUnlocked = partnerships.some(p => p.partner_id === userId && p.status === 'active')
+
+  const sendRequest = async (e) => {
+    e.preventDefault()
+    setSendError(null)
+    setSendOk(false)
+    setSending(true)
+    try {
+      await requestPartnership(supabase, email.trim())
+      setEmail('')
+      setSendOk(true)
+      reload()
+    } catch (err) {
+      setSendError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const respond = async (id, status) => {
+    await respondToPartnership(supabase, id, status).catch(() => {})
+    reload()
+  }
+
+  if (loading) {
+    return (
+      <div className="panel reveal" style={{ padding: 28, display: 'grid', placeItems: 'center', minHeight: 200 }}>
+        <div className="mono" style={{ opacity: 0.4, fontSize: 12, letterSpacing: '0.1em' }}>loading bonds...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="panel reveal" style={{ padding: 0, display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
+      {/* Header */}
+      <div style={{ padding: '16px 20px', borderBottom: '3px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }}>
+        <div className="eyebrow" style={{ opacity: 0.7 }}>// accountability</div>
+        <div className="display" style={{ fontSize: 30 }}>BONDS</div>
+      </div>
+
+      <div className="scroll" style={{ padding: 20, display: 'grid', gap: 24, alignContent: 'start' }}>
+
+        {/* ── Locked state ── */}
+        {!isUnlocked && (
+          <div style={{ padding: '20px 0', borderBottom: '3px solid var(--ink)' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+              <div className="display" style={{ fontSize: 48, color: 'var(--red)', lineHeight: 1 }}>○</div>
+              <div>
+                <div className="display" style={{ fontSize: 20 }}>LOCKED</div>
+                <div className="hand" style={{ fontSize: 17, marginTop: 4, opacity: 0.7, lineHeight: 1.3 }}>
+                  Accept someone's bond request to unlock.<br />
+                  You must be watched before you can watch.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Active bonds ── */}
+        {isUnlocked && active.length > 0 && (
+          <div>
+            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 12 }}>active bonds</div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {active.map(p => <PartnerCard key={p.id} partnership={p} userId={userId} />)}
+            </div>
+          </div>
+        )}
+
+        {isUnlocked && active.length === 0 && (
+          <div className="hand" style={{ opacity: 0.5, fontSize: 18 }}>no active bonds yet. invite someone below.</div>
+        )}
+
+        {/* ── Incoming requests ── */}
+        {incoming.length > 0 && (
+          <div>
+            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>
+              incoming requests <span style={{ color: 'var(--red)' }}>· {incoming.length}</span>
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {incoming.map(p => {
+                const from = p.requester
+                return (
+                  <div key={p.id} className="panel-sm" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <div>
+                      <div className="display" style={{ fontSize: 18 }}>{from?.display_name || 'someone'}</div>
+                      {from?.shikai_name && <div className="mono" style={{ fontSize: 10, opacity: 0.5 }}>season // {from.shikai_name}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button className="btn red sm" onClick={() => respond(p.id, 'active')} style={{ fontSize: 12 }}>ACCEPT</button>
+                      <button className="btn ghost sm" onClick={() => respond(p.id, 'declined')} style={{ fontSize: 11, opacity: 0.6 }}>decline</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Outgoing pending ── */}
+        {isUnlocked && outgoing.length > 0 && (
+          <div>
+            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>waiting on reply</div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {outgoing.map(p => (
+                <div key={p.id} className="panel-sm" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, opacity: 0.7 }}>
+                  <div className="mono" style={{ fontSize: 11 }}>{p.partner?.display_name || 'pending...'}</div>
+                  <button className="btn ghost sm" onClick={async () => { await removePartnership(supabase, p.id).catch(() => {}); reload() }} style={{ fontSize: 10, padding: '4px 8px' }}>cancel</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Add partner ── */}
+        {isUnlocked && (
+          <div>
+            <div className="eyebrow" style={{ opacity: 0.6, marginBottom: 10 }}>invite by email</div>
+            <form onSubmit={sendRequest} style={{ display: 'grid', gap: 8 }}>
+              <input
+                className="ink-input"
+                type="email"
+                placeholder="their@email.com"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setSendError(null); setSendOk(false) }}
+                required
+              />
+              {sendError && <div className="mono" style={{ fontSize: 10, color: 'var(--red)', letterSpacing: '0.08em' }}>{sendError}</div>}
+              {sendOk && <div className="mono" style={{ fontSize: 10, opacity: 0.6, letterSpacing: '0.08em' }}>request sent.</div>}
+              <button type="submit" className="btn red sm" disabled={sending} style={{ justifySelf: 'start' }}>
+                {sending ? '...' : 'SEND REQUEST ▸'}
+              </button>
+            </form>
+          </div>
+        )}
+
       </div>
     </div>
   )

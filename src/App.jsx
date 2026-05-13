@@ -4,7 +4,7 @@ import Dashboard from './Dashboard'
 import AuthGate from './AuthGate'
 import { useTheme } from './hooks'
 import { getSupabase } from './lib/supabase/client'
-import { getSession, onAuthStateChange } from './lib/supabase/auth'
+import { getSession, onAuthStateChange, signOut } from './lib/supabase/auth'
 import { getProfile, updateProfile } from './lib/supabase/profile'
 
 function ThemeToggle({ theme, onToggle }) {
@@ -56,6 +56,10 @@ export default function App() {
     try { await updateProfile(getSupabase(), { chosen_burners: ids, shikai_name: name }) } catch {}
   }
 
+  const handleLogout = async () => {
+    try { await signOut(getSupabase()) } catch {}
+  }
+
   const handleReset = () => {
     setTransitioning(true)
     setTimeout(async () => {
@@ -73,7 +77,7 @@ export default function App() {
       {!session
         ? <AuthGate supabase={getSupabase()} />
         : chosen && chosen.length > 0
-          ? <Dashboard chosen={chosen} shikaiName={shikaiName} onReset={handleReset} />
+          ? <Dashboard chosen={chosen} shikaiName={shikaiName} onReset={handleReset} onLogout={handleLogout} userId={session?.user?.id} />
           : <Onboarding onComplete={handleComplete} />
       }
       <div className={'wipe ' + (transitioning ? 'run' : '')} />
